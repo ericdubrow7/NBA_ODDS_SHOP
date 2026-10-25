@@ -77,7 +77,8 @@ function buildComparison(events, books, minBooks) {
       for (const m of bm.markets || []) {
         if (!(m.key in MARKETS)) continue;
         for (const o of m.outcomes || []) {
-          if (o.point == null || o.price == null) continue;
+          // Novig posts 1.0 (shown as 0) when it has no price; treat as not offered.
+          if (o.point == null || o.price == null || o.price <= 1) continue;
           const key = [ev.id, m.key, o.description, o.name, o.point].join("|");
           let line = lines.get(key);
           if (!line) {
