@@ -78,7 +78,7 @@
         </select>
         <select id="fBook"><option value="">Any best book</option></select>
         <select id="fBooks" aria-label="Number of books"><option value="">Any # of books</option></select>
-        <select id="sortSel" class="mobile-only" aria-label="Sort">
+        <select id="sortSel" aria-label="Sort" hidden>
           <option value="pct:-1">Sort: % vs avg</option>
           <option value="usVsAvg:-1">Sort: Odds vs avg</option>
           <option value="best:-1">Sort: Best odds</option>
@@ -90,6 +90,10 @@
         <div class="seg" role="group" aria-label="Odds format">
           <button type="button" data-fmt="us" class="on">American</button>
           <button type="button" data-fmt="dec">Decimal</button>
+        </div>
+        <div class="seg" role="group" aria-label="View">
+          <button type="button" data-view="table">Table</button>
+          <button type="button" data-view="cards">Cards</button>
         </div>
         <button id="exportCsv" class="btn ghost" type="button">Export CSV</button>
       </div>

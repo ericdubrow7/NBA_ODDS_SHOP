@@ -47,6 +47,7 @@ const state = {
   minBooks: store.get("minBooks", 2),
   lookahead: store.get("lookahead", 48),
   fmt: store.get("fmt", "us"),
+  view: store.get("view", null),
   sort: { key: "pct", dir: -1 },
   shown: PAGE_SIZE,
 };
@@ -386,18 +387,23 @@ function renderHead() {
 
 // Matches the max-width breakpoint in styles.css.
 const mobileMq = matchMedia("(max-width: 700px)");
+// Saved "table"/"cards" choice; until one is made, phones get cards.
+const cardView = () => (state.view ? state.view === "cards" : mobileMq.matches);
 
 function renderTable() {
   const cols = columns();
   const rows = state.filtered.slice(0, state.shown);
   const maxPct = Math.max(1, ...state.filtered.map((r) => r.pct));
-  const mobile = mobileMq.matches;
-  $("grid").parentElement.hidden = mobile;
-  $("cards").hidden = !mobile;
+  const cards = cardView();
+  $("grid").parentElement.hidden = cards;
+  $("cards").hidden = !cards;
+  $("sortSel").hidden = !cards;
+  document.querySelectorAll(".seg button[data-view]").forEach((b) =>
+    b.classList.toggle("on", b.dataset.view === (cards ? "cards" : "table")));
   const sortVal = `${state.sort.key}:${state.sort.dir}`;
   if ([...$("sortSel").options].some((o) => o.value === sortVal)) $("sortSel").value = sortVal;
 
-  if (mobile) {
+  if (cards) {
     renderCards(rows, maxPct);
   } else if (!rows.length) {
     renderHead();
@@ -585,12 +591,19 @@ function initTable() {
   for (const id of ["search", "fGame", "fMarket", "fSide", "fBook", "fBooks", "fEdge"]) {
     $(id).addEventListener(id === "search" || id === "fEdge" ? "input" : "change", applyFilters);
   }
-  document.querySelectorAll(".seg button").forEach((b) => {
+  document.querySelectorAll(".seg button[data-fmt]").forEach((b) => {
     b.classList.toggle("on", b.dataset.fmt === state.fmt);
     b.addEventListener("click", () => {
       state.fmt = b.dataset.fmt;
       store.set("fmt", state.fmt);
-      document.querySelectorAll(".seg button").forEach((x) => x.classList.toggle("on", x === b));
+      document.querySelectorAll(".seg button[data-fmt]").forEach((x) => x.classList.toggle("on", x === b));
+      renderTable();
+    });
+  });
+  document.querySelectorAll(".seg button[data-view]").forEach((b) => {
+    b.addEventListener("click", () => {
+      state.view = b.dataset.view;
+      store.set("view", state.view);
       renderTable();
     });
   });
