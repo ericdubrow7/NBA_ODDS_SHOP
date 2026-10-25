@@ -1,0 +1,31 @@
+name: Refresh odds snapshot
+
+on:
+  workflow_dispatch:
+  # Uncomment to refresh automatically. Each run costs ~4 API credits per game
+  # (~50 on a 12-game slate), so mind the 500/month free tier.
+  # schedule:
+  #   - cron: "0 21 * * *"   # 5 PM ET daily
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - run: python scripts/fetch_odds.py --hours 48
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+      - name: Commit snapshot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/nba_player_props.json
+          git diff --cached --quiet || git commit -m "Refresh NBA odds snapshot"
+          git push
