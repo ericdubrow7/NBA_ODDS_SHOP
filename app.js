@@ -3,14 +3,29 @@
 
 const API_BASE = "https://api.the-odds-api.com/v4";
 const SPORT = "basketball_nba";
-const REGIONS = "us";
 const MARKETS = {
   player_points: "Points",
   player_rebounds: "Rebounds",
   player_assists: "Assists",
   player_threes: "Threes",
 };
-const ALL_BOOKS = ["FanDuel", "DraftKings", "BetMGM", "Caesars", "BetRivers"];
+// Odds API bookmaker key -> display name. Matched by key because titles change
+// (espnbet now reports as "theScore Bet"). Requested via `bookmakers`, which bills
+// one region per 10 books, so these span us/us2/us_ex at the cost of one region.
+const BOOKS = {
+  fanduel: "FanDuel",
+  draftkings: "DraftKings",
+  betmgm: "BetMGM",
+  williamhill_us: "Caesars",
+  betrivers: "BetRivers",
+  ballybet: "Bally Bet",
+  espnbet: "theScore Bet",
+  hardrockbet: "Hard Rock Bet",
+  novig: "Novig",
+};
+const ALL_BOOKS = Object.values(BOOKS);
+// Books that existed before a saved selection; anything newer starts checked.
+const ORIGINAL_BOOKS = ["FanDuel", "DraftKings", "BetMGM", "Caesars", "BetRivers"];
 const SNAPSHOT_URL = "data/nba_player_props.json";
 const REQUEST_SLEEP_MS = 300;
 const PAGE_SIZE = 150;
@@ -28,13 +43,21 @@ const state = {
   source: "",
   rows: [],
   filtered: [],
-  books: store.get("books", ALL_BOOKS.slice()),
+  books: initialBooks(),
   minBooks: store.get("minBooks", 2),
   lookahead: store.get("lookahead", 48),
   fmt: store.get("fmt", "us"),
   sort: { key: "pct", dir: -1 },
   shown: PAGE_SIZE,
 };
+
+function initialBooks() {
+  const saved = store.get("books");
+  const known = store.get("knownBooks", ORIGINAL_BOOKS);
+  store.set("knownBooks", ALL_BOOKS);
+  if (!saved) return ALL_BOOKS.slice();
+  return ALL_BOOKS.filter((b) => saved.includes(b) || !known.includes(b));
+}
 
 const $ = (id) => document.getElementById(id);
 
@@ -49,7 +72,8 @@ function buildComparison(events, books, minBooks) {
   const lines = new Map();
   for (const ev of events) {
     for (const bm of ev.bookmakers || []) {
-      if (!books.includes(bm.title)) continue;
+      const name = BOOKS[bm.key];
+      if (!name || !books.includes(name)) continue;
       for (const m of bm.markets || []) {
         if (!(m.key in MARKETS)) continue;
         for (const o of m.outcomes || []) {
@@ -70,7 +94,7 @@ function buildComparison(events, books, minBooks) {
             };
             lines.set(key, line);
           }
-          if (!(bm.title in line.prices)) line.prices[bm.title] = o.price;
+          if (!(name in line.prices)) line.prices[name] = o.price;
         }
       }
     }
@@ -153,7 +177,7 @@ async function fetchLive() {
       try {
         const r = await apiGet(`/sports/${SPORT}/events/${events[i].id}/odds`, {
           apiKey: key,
-          regions: REGIONS,
+          bookmakers: Object.keys(BOOKS).join(","),
           markets: Object.keys(MARKETS).join(","),
           oddsFormat: "decimal",
           dateFormat: "iso",

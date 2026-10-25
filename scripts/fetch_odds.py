@@ -17,6 +17,8 @@ import requests
 
 SPORT = "basketball_nba"
 MARKETS = "player_points,player_rebounds,player_assists,player_threes"
+# Same list as BOOKS in app.js. Billed as one region per 10 books.
+BOOKMAKERS = "fanduel,draftkings,betmgm,williamhill_us,betrivers,ballybet,espnbet,hardrockbet,novig"
 OUT_FILE = Path(__file__).resolve().parent.parent / "data" / "nba_player_props.json"
 
 
@@ -41,7 +43,7 @@ def main():
     for i, event in enumerate(events, start=1):
         r = requests.get(
             f"https://api.the-odds-api.com/v4/sports/{SPORT}/events/{event['id']}/odds",
-            params={"apiKey": api_key, "regions": "us", "markets": MARKETS, "oddsFormat": "decimal", "dateFormat": "iso"},
+            params={"apiKey": api_key, "bookmakers": BOOKMAKERS, "markets": MARKETS, "oddsFormat": "decimal", "dateFormat": "iso"},
         )
         if r.status_code != 200:
             print(f"Failed {event['id']}: {r.status_code} {r.text[:200]}")

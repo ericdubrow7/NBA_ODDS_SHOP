@@ -4,7 +4,7 @@ A static web version of `NBA Odds Analysis - Player Props Avg vs Best Book.ipynb
 
 For every NBA player-prop line (Points, Rebounds, Assists, Threes), it:
 
-1. Collects Over/Under prices from FanDuel, DraftKings, BetMGM, Caesars and BetRivers.
+1. Collects Over/Under prices from FanDuel, DraftKings, BetMGM, Caesars, BetRivers, Bally Bet, theScore Bet (formerly ESPN BET), Hard Rock Bet and Novig.
 2. Averages the decimal odds across books offering the same player, market, side and line.
 3. Picks the book with the best price and shows how far it sits above the average.
 
