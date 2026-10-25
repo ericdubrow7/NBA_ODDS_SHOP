@@ -273,6 +273,7 @@ function applyFilters() {
   const market = $("fMarket").value;
   const side = $("fSide").value;
   const book = $("fBook").value;
+  const nBooks = parseInt($("fBooks").value, 10);
   const minEdge = parseFloat($("fEdge").value);
 
   let rows = state.rows.filter((r) =>
@@ -281,6 +282,7 @@ function applyFilters() {
     (!market || r.market === market) &&
     (!side || r.side === side) &&
     (!book || r.bestBook === book) &&
+    (!nBooks || r.booksOffering >= nBooks) &&
     (!Number.isFinite(minEdge) || r.pct >= minEdge)
   );
 
@@ -306,6 +308,11 @@ function populateFilterOptions() {
   fillSelect($("fGame"), "All games", gameOpts);
   fillSelect($("fMarket"), "All markets", Object.values(MARKETS).map((m) => [m, m]));
   fillSelect($("fBook"), "Any best book", state.books.map((b) => [b, b]));
+  // "N+ books" from just above the settings minimum up to the most any line has.
+  const maxBooks = state.rows.reduce((m, r) => Math.max(m, r.booksOffering), 0);
+  const countOpts = [];
+  for (let n = state.minBooks + 1; n <= maxBooks; n++) countOpts.push([String(n), n === maxBooks ? `${n} books` : `${n}+ books`]);
+  fillSelect($("fBooks"), "Any # of books", countOpts);
 }
 
 function fillSelect(sel, allLabel, opts) {
@@ -533,7 +540,7 @@ function initSettings() {
 }
 
 function initTable() {
-  for (const id of ["search", "fGame", "fMarket", "fSide", "fBook", "fEdge"]) {
+  for (const id of ["search", "fGame", "fMarket", "fSide", "fBook", "fBooks", "fEdge"]) {
     $(id).addEventListener(id === "search" || id === "fEdge" ? "input" : "change", applyFilters);
   }
   document.querySelectorAll(".seg button").forEach((b) => {
