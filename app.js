@@ -384,16 +384,27 @@ function renderHead() {
   }).join("");
 }
 
+// Matches the max-width breakpoint in styles.css.
+const mobileMq = matchMedia("(max-width: 700px)");
+
 function renderTable() {
-  renderHead();
   const cols = columns();
   const rows = state.filtered.slice(0, state.shown);
   const maxPct = Math.max(1, ...state.filtered.map((r) => r.pct));
+  const mobile = mobileMq.matches;
+  $("grid").parentElement.hidden = mobile;
+  $("cards").hidden = !mobile;
+  const sortVal = `${state.sort.key}:${state.sort.dir}`;
+  if ([...$("sortSel").options].some((o) => o.value === sortVal)) $("sortSel").value = sortVal;
 
-  if (!rows.length) {
+  if (mobile) {
+    renderCards(rows, maxPct);
+  } else if (!rows.length) {
+    renderHead();
     $("body").innerHTML = `<tr><td class="empty" colspan="${cols.length}">${
       state.events.length ? "No lines match these filters." : "No data loaded yet."}</td></tr>`;
   } else {
+    renderHead();
     $("body").innerHTML = rows.map((r) => {
       const cells = cols.map((c) => {
         switch (c.key) {
@@ -425,6 +436,37 @@ function renderTable() {
   const total = state.filtered.length;
   $("rowCount").textContent = total ? `Showing ${rows.length.toLocaleString()} of ${total.toLocaleString()} lines` : "";
   $("more").hidden = rows.length >= total;
+}
+
+function renderCards(rows, maxPct) {
+  if (!rows.length) {
+    $("cards").innerHTML = `<div class="empty">${state.events.length ? "No lines match these filters." : "No data loaded yet."}</div>`;
+    return;
+  }
+  const isUs = state.fmt === "us";
+  $("cards").innerHTML = rows.map((r) => {
+    const chips = state.books.filter((b) => r.prices[b] != null).map((b) => {
+      const p = r.prices[b];
+      return `<span class="chip${p === r.best ? " best" : ""}">${esc(b)} <b>${fmtOdds(p, Math.round(decimalToUs(p)))}</b></span>`;
+    }).join("");
+    return `<article class="card">
+      <div class="card-top">
+        <div>
+          <div class="card-player">${esc(r.player)}</div>
+          <div class="card-prop">${esc(r.side)} ${r.line.toFixed(1)} ${esc(r.market)}</div>
+          <div class="card-game">${esc(r.away)} @ ${esc(r.home)} · ${esc(fmtGameTime(r.start))}</div>
+        </div>
+        <div class="card-edge" style="${edgeStyle(r.pct, maxPct)}">${r.pct.toFixed(2)}%</div>
+      </div>
+      <div class="card-best">
+        <span class="best-pick">Best <b>${esc(r.bestBook)} ${fmtOdds(r.best, r.bestUs)}</b></span>
+        <span>Avg <b>${fmtOdds(r.avg, r.avgUs)}</b></span>
+        <span>vs avg <b>${isUs ? signed(r.usVsAvg) : "+" + r.priceVsAvg.toFixed(3)}</b></span>
+        <span><b>${r.booksOffering}</b> books</span>
+      </div>
+      <div class="card-books">${chips}</div>
+    </article>`;
+  }).join("");
 }
 
 function edgeStyle(pct, maxPct) {
@@ -560,6 +602,12 @@ function initTable() {
     state.sort = state.sort.key === key ? { key, dir: -state.sort.dir } : { key, dir: textCol ? 1 : -1 };
     applyFilters();
   });
+  $("sortSel").addEventListener("change", (e) => {
+    const [key, dir] = e.target.value.split(":");
+    state.sort = { key, dir: Number(dir) };
+    applyFilters();
+  });
+  mobileMq.addEventListener("change", renderTable);
   $("more").addEventListener("click", () => { state.shown += PAGE_SIZE; renderTable(); });
   $("exportCsv").addEventListener("click", exportCsv);
 }

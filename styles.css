@@ -51,6 +51,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; }
 body {
   background: var(--bg);
@@ -108,7 +109,7 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accen
 
 .breakdowns { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0 16px; }
 .bars { display: grid; gap: 6px; }
-.bar-row { display: grid; grid-template-columns: 90px 1fr 44px; align-items: center; gap: 8px; font-size: 13px; }
+.bar-row { display: grid; grid-template-columns: 104px 1fr 44px; align-items: center; gap: 8px; font-size: 13px; }
 .bar-track { background: var(--surface-2); border-radius: 4px; height: 12px; overflow: hidden; }
 .bar-fill { background: var(--bar); height: 100%; border-radius: 4px; }
 .bar-row .n { text-align: right; font-variant-numeric: tabular-nums; }
@@ -139,8 +140,53 @@ tbody tr:hover td.best { background: var(--best-bg); }
 .table-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; color: var(--muted); }
 .foot { color: var(--muted); font-size: 12px; padding-bottom: 24px; }
 
-@media (max-width: 600px) {
-  .filters > * { flex: 1 1 calc(50% - 8px); }
-  .filters #search { flex-basis: 100%; }
+.mobile-only { display: none; }
+
+/* Card list that replaces the wide table on phones (see renderCards). */
+.cards { display: grid; gap: 10px; }
+.card { border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: var(--surface); }
+.card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.card-player { font-weight: 700; font-size: 15px; }
+.card-prop { font-weight: 600; }
+.card-game { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.card-edge { flex: none; font-weight: 700; font-variant-numeric: tabular-nums; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border); }
+.card-best { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.card-best b { color: var(--text); }
+.card-best .best-pick { color: var(--best-text); }
+.card-best .best-pick b { color: inherit; }
+.card-books { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.chip { display: inline-flex; gap: 6px; padding: 4px 8px; border-radius: 6px; background: var(--surface-2); font-size: 12px; font-variant-numeric: tabular-nums; }
+.chip b { font-weight: 700; }
+.chip.best { background: var(--best-bg); color: var(--best-text); }
+
+@media (max-width: 700px) {
+  .wrap { padding: 0 12px; }
+  .topbar { margin-bottom: 12px; }
+  .topbar-inner { padding-top: 10px; padding-bottom: 10px; }
+  h1 { font-size: 18px; }
+  .sub { font-size: 12px; }
+  .panel { padding: 12px; margin-bottom: 12px; }
+
+  /* 16px stops iOS from zooming in when a field gets focus. */
+  input, select, .btn, .seg button { font-size: 16px; min-height: 42px; }
+  input[type="checkbox"] { min-height: 0; width: 18px; height: 18px; }
+  .book-checks { gap: 8px 14px; }
+  .actions .btn { flex: 1 1 calc(50% - 8px); justify-content: center; }
+
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .tile { padding: 10px 12px; }
   .tile .value { font-size: 20px; }
+  .tile:last-child { grid-column: 1 / -1; }
+  .tile:last-child .note { white-space: normal; }
+
+  .filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .filters #search, .filters #fGame { grid-column: 1 / -1; }
+  .filters .inline { justify-content: space-between; }
+  .filters .inline input { flex: 1; width: auto; }
+  .seg { display: flex; }
+  .seg button { flex: 1; }
+  .mobile-only { display: block; }
+
+  .table-foot { flex-direction: column; align-items: stretch; text-align: center; }
+  .table-foot .btn { justify-content: center; }
 }

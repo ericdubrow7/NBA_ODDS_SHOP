@@ -78,6 +78,14 @@
         </select>
         <select id="fBook"><option value="">Any best book</option></select>
         <select id="fBooks" aria-label="Number of books"><option value="">Any # of books</option></select>
+        <select id="sortSel" class="mobile-only" aria-label="Sort">
+          <option value="pct:-1">Sort: % vs avg</option>
+          <option value="usVsAvg:-1">Sort: Odds vs avg</option>
+          <option value="best:-1">Sort: Best odds</option>
+          <option value="booksOffering:-1">Sort: Most books</option>
+          <option value="start:1">Sort: Game time</option>
+          <option value="player:1">Sort: Player</option>
+        </select>
         <label class="inline">Min % vs avg <input id="fEdge" type="number" step="0.5" value="0"></label>
         <div class="seg" role="group" aria-label="Odds format">
           <button type="button" data-fmt="us" class="on">American</button>
@@ -91,6 +99,7 @@
           <tbody id="body"></tbody>
         </table>
       </div>
+      <div id="cards" class="cards" hidden></div>
       <div class="table-foot">
         <span id="rowCount"></span>
         <button id="more" class="btn ghost" type="button" hidden>Show more</button>
