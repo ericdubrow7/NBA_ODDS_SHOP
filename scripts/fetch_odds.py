@@ -17,7 +17,7 @@ import requests
 
 SPORT = "basketball_nba"
 MARKETS = "player_points,player_rebounds,player_assists,player_threes"
-# Same list as BOOKS in app.js. Billed as one region per 10 books.
+# Same list as BOOKS in common.js. Billed as one region per 10 books.
 BOOKMAKERS = "fanduel,draftkings,betmgm,williamhill_us,betrivers,ballybet,espnbet,hardrockbet,novig"
 OUT_FILE = Path(__file__).resolve().parent.parent / "data" / "nba_player_props.json"
 

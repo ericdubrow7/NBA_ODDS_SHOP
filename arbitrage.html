@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NBA Prop Arbitrage</title>
+  <meta name="description" content="NBA player props: Over/Under pairs across sportsbooks that lock in a profit.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏀</text></svg>">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <div>
+        <h1>NBA Prop Arbitrage</h1>
+        <p class="sub">Over/Under pairs across books where betting both sides locks in a profit</p>
+      </div>
+      <nav class="nav" aria-label="Pages">
+        <a href="index.html">Line Shopper</a>
+        <a href="arbitrage.html" aria-current="page">Arbitrage</a>
+      </nav>
+      <button id="themeToggle" class="btn ghost" type="button" aria-label="Toggle theme">◐</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <details id="settings" class="panel">
+      <summary>Data source &amp; settings</summary>
+      <div class="settings-grid">
+        <label class="field">
+          <span>The Odds API key</span>
+          <input id="apiKey" type="password" autocomplete="off" placeholder="Paste your key">
+          <label class="check"><input id="rememberKey" type="checkbox" checked> Remember on this device</label>
+        </label>
+        <label class="field">
+          <span>Look-ahead window (hours)</span>
+          <input id="lookahead" type="number" min="1" step="1" value="48">
+          <small>Blank = all upcoming games</small>
+        </label>
+        <fieldset class="field">
+          <legend>Sportsbooks</legend>
+          <div id="bookChecks" class="book-checks"></div>
+          <small>Only include books you can actually bet at.</small>
+        </fieldset>
+      </div>
+      <div class="actions">
+        <button id="fetchLive" class="btn primary" type="button">Fetch live odds</button>
+        <button id="loadSnapshot" class="btn" type="button">Load saved snapshot</button>
+        <label class="btn">Open JSON file<input id="fileInput" type="file" accept=".json,application/json" hidden></label>
+      </div>
+      <p class="hint">Arbitrage windows close fast, often in minutes. The saved snapshot is usually hours old, so fetch live odds before placing anything. Live fetches cost about 4 API credits per game. Odds loaded on either page carry over to the other in this tab.</p>
+    </details>
+
+    <div id="status" class="status" role="status"></div>
+
+    <section class="tiles" id="tiles"></section>
+
+    <section class="panel">
+      <div class="filters">
+        <input id="search" type="search" placeholder="Search player or team">
+        <select id="fGame"><option value="">All games</option></select>
+        <select id="fMarket"><option value="">All markets</option></select>
+        <select id="sortSel" aria-label="Sort">
+          <option value="roi">Sort: Return %</option>
+          <option value="start">Sort: Game time</option>
+          <option value="player">Sort: Player</option>
+        </select>
+        <label class="inline">Total stake $ <input id="stake" type="number" min="1" step="10" value="100"></label>
+        <label class="inline">Min return % <input id="fRoi" type="number" step="0.25" value="0"></label>
+        <div class="seg" role="group" aria-label="Odds format">
+          <button type="button" data-fmt="us" class="on">American</button>
+          <button type="button" data-fmt="dec">Decimal</button>
+        </div>
+      </div>
+      <div id="arbs" class="cards"></div>
+      <div class="table-foot"><span id="rowCount"></span></div>
+    </section>
+
+    <footer class="foot">
+      <p><strong>How it works:</strong> for each player, market and line, the best Over and best Under across your selected books are paired. When the two implied probabilities add up to less than 100%, splitting the stake as shown pays the same whichever side wins. <em>Return</em> is profit as a share of the total stake.</p>
+      <p><strong>Before you bet:</strong> confirm both prices are still live and the line matches exactly. Check each book's limits and its rules for players who don't play. Odds marked in orange haven't updated in over 15 minutes.</p>
+    </footer>
+  </main>
+
+  <script src="common.js"></script>
+  <script src="arbitrage.js"></script>
+</body>
+</html>

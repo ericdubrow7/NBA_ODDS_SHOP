@@ -1,42 +1,7 @@
 // NBA Player Props: Average Odds vs Most Favorable Book
 // Browser port of "NBA Odds Analysis - Player Props Avg vs Best Book.ipynb".
 
-const API_BASE = "https://api.the-odds-api.com/v4";
-const SPORT = "basketball_nba";
-const MARKETS = {
-  player_points: "Points",
-  player_rebounds: "Rebounds",
-  player_assists: "Assists",
-  player_threes: "Threes",
-};
-// Odds API bookmaker key -> display name. Matched by key because titles change
-// (espnbet now reports as "theScore Bet"). Requested via `bookmakers`, which bills
-// one region per 10 books, so these span us/us2/us_ex at the cost of one region.
-const BOOKS = {
-  fanduel: "FanDuel",
-  draftkings: "DraftKings",
-  betmgm: "BetMGM",
-  williamhill_us: "Caesars",
-  betrivers: "BetRivers",
-  ballybet: "Bally Bet",
-  espnbet: "theScore Bet",
-  hardrockbet: "Hard Rock Bet",
-  novig: "Novig",
-};
-const ALL_BOOKS = Object.values(BOOKS);
-// Books that existed before a saved selection; anything newer starts checked.
-const ORIGINAL_BOOKS = ["FanDuel", "DraftKings", "BetMGM", "Caesars", "BetRivers"];
-const SNAPSHOT_URL = "data/nba_player_props.json";
-const REQUEST_SLEEP_MS = 300;
 const PAGE_SIZE = 150;
-
-const store = {
-  get(k, fallback = null) {
-    try { const v = localStorage.getItem(k); return v === null ? fallback : JSON.parse(v); } catch { return fallback; }
-  },
-  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
-  del(k) { try { localStorage.removeItem(k); } catch {} },
-};
 
 const state = {
   events: [],
@@ -45,62 +10,35 @@ const state = {
   filtered: [],
   books: initialBooks(),
   minBooks: store.get("minBooks", 2),
-  lookahead: store.get("lookahead", 48),
   fmt: store.get("fmt", "us"),
   view: store.get("view", null),
   sort: { key: "pct", dir: -1 },
   shown: PAGE_SIZE,
 };
 
-function initialBooks() {
-  const saved = store.get("books");
-  const known = store.get("knownBooks", ORIGINAL_BOOKS);
-  store.set("knownBooks", ALL_BOOKS);
-  if (!saved) return ALL_BOOKS.slice();
-  return ALL_BOOKS.filter((b) => saved.includes(b) || !known.includes(b));
-}
-
-const $ = (id) => document.getElementById(id);
-
 // ---------- odds math (matches the notebook) ----------
-
-function decimalToUs(d) {
-  if (d == null || Number.isNaN(d) || d === 1) return 0;
-  return d >= 2 ? (d - 1) * 100 : -100 / (d - 1);
-}
 
 function buildComparison(events, books, minBooks) {
   const lines = new Map();
-  for (const ev of events) {
-    for (const bm of ev.bookmakers || []) {
-      const name = BOOKS[bm.key];
-      if (!name || !books.includes(name)) continue;
-      for (const m of bm.markets || []) {
-        if (!(m.key in MARKETS)) continue;
-        for (const o of m.outcomes || []) {
-          // Novig posts 1.0 (shown as 0) when it has no price; treat as not offered.
-          if (o.point == null || o.price == null || o.price <= 1) continue;
-          const key = [ev.id, m.key, o.description, o.name, o.point].join("|");
-          let line = lines.get(key);
-          if (!line) {
-            line = {
-              id: ev.id,
-              start: ev.commence_time,
-              home: ev.home_team,
-              away: ev.away_team,
-              market: MARKETS[m.key],
-              player: o.description,
-              side: o.name,
-              line: o.point,
-              prices: {},
-            };
-            lines.set(key, line);
-          }
-          if (!(name in line.prices)) line.prices[name] = o.price;
-        }
-      }
+  forEachPrice(events, books, ({ ev, book, market: m, outcome: o }) => {
+    const key = [ev.id, m.key, o.description, o.name, o.point].join("|");
+    let line = lines.get(key);
+    if (!line) {
+      line = {
+        id: ev.id,
+        start: ev.commence_time,
+        home: ev.home_team,
+        away: ev.away_team,
+        market: MARKETS[m.key],
+        player: o.description,
+        side: o.name,
+        line: o.point,
+        prices: {},
+      };
+      lines.set(key, line);
     }
-  }
+    if (!(book in line.prices)) line.prices[book] = o.price;
+  });
 
   const rows = [];
   for (const r of lines.values()) {
@@ -130,119 +68,10 @@ function buildComparison(events, books, minBooks) {
 
 // ---------- data loading ----------
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-async function apiGet(path, params) {
-  const url = new URL(API_BASE + path);
-  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-  const res = await fetch(url);
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
-  }
-  return { json: await res.json(), remaining: res.headers.get("x-requests-remaining"), used: res.headers.get("x-requests-used") };
-}
-
-async function fetchLive() {
-  const key = $("apiKey").value.trim();
-  if (!key) {
-    setStatus("Enter your Odds API key first.", "warn");
-    $("settings").open = true;
-    $("apiKey").focus();
-    return;
-  }
-  if ($("rememberKey").checked) store.set("apiKey", key); else store.del("apiKey");
-
-  const btn = $("fetchLive");
-  btn.disabled = true;
-  try {
-    setStatus("Looking up upcoming NBA games…");
-    const { json: allEvents } = await apiGet(`/sports/${SPORT}/events`, { apiKey: key });
-    const hours = parseFloat($("lookahead").value);
-    const cutoff = Number.isFinite(hours) ? Date.now() + hours * 3600e3 : Infinity;
-    const events = allEvents.filter((e) => new Date(e.commence_time).getTime() <= cutoff);
-    if (!events.length) {
-      setStatus("No NBA games in that window.", "warn");
-      return;
-    }
-
-    const cost = events.length * Object.keys(MARKETS).length;
-    if (!confirm(`Fetch player props for ${events.length} game(s)? This uses about ${cost} API credits.`)) {
-      setStatus("Cancelled.");
-      return;
-    }
-
-    const data = [];
-    let remaining = null;
-    for (let i = 0; i < events.length; i++) {
-      setStatus(`Fetching game ${i + 1} of ${events.length}…`);
-      try {
-        const r = await apiGet(`/sports/${SPORT}/events/${events[i].id}/odds`, {
-          apiKey: key,
-          bookmakers: Object.keys(BOOKS).join(","),
-          markets: Object.keys(MARKETS).join(","),
-          oddsFormat: "decimal",
-          dateFormat: "iso",
-        });
-        data.push(r.json);
-        remaining = r.remaining;
-      } catch (err) {
-        console.warn("Event failed", events[i].id, err);
-      }
-      if (i < events.length - 1) await sleep(REQUEST_SLEEP_MS);
-    }
-    setData(data, `Live · fetched ${fmtClock(new Date())}`);
-    const quota = remaining != null ? ` · ${remaining} API credits left` : "";
-    setStatus(`Loaded ${data.length} of ${events.length} games${quota}.`);
-  } catch (err) {
-    setStatus(`Fetch failed: ${err.message}`, "err");
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-async function loadSnapshot() {
-  try {
-    setStatus("Loading saved snapshot…");
-    const res = await fetch(SNAPSHOT_URL, { cache: "no-cache" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const stamp = latestUpdate(data);
-    setData(data, `Snapshot${stamp ? " · odds as of " + fmtClock(stamp) : ""}`);
-    setStatus(`Loaded snapshot: ${data.length} games${stamp ? ", odds as of " + fmtClock(stamp) : ""}.`);
-  } catch (err) {
-    setStatus(`No snapshot available (${err.message}). Enter an API key and fetch live odds.`, "warn");
-    $("settings").open = true;
-  }
-}
-
-function loadFile(file) {
-  const reader = new FileReader();
-  reader.onload = () => {
-    try {
-      const data = JSON.parse(reader.result);
-      if (!Array.isArray(data)) throw new Error("expected an array of events");
-      setData(data, `File · ${file.name}`);
-      setStatus(`Loaded ${data.length} games from ${file.name}.`);
-    } catch (err) {
-      setStatus(`Could not read ${file.name}: ${err.message}`, "err");
-    }
-  };
-  reader.readAsText(file);
-}
-
-function latestUpdate(data) {
-  let max = 0;
-  for (const ev of data) for (const bm of ev.bookmakers || []) for (const m of bm.markets || []) {
-    const t = Date.parse(m.last_update || bm.last_update || "");
-    if (t > max) max = t;
-  }
-  return max ? new Date(max) : null;
-}
-
 function setData(events, source) {
   state.events = events;
   state.source = source;
+  rememberData(events, source);
   recompute();
 }
 
@@ -504,23 +333,8 @@ function csvCell(v) {
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-function download(blob, name) {
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-}
-
 // ---------- formatting helpers ----------
 
-const gameTimeFmt = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
-});
-const fmtGameTime = (iso) => `${gameTimeFmt.format(new Date(iso))} ET`;
-const fmtClock = (d) => d.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-const dateStamp = () => new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
-const signed = (n) => (n > 0 ? `+${n}` : String(n));
 const fmtOdds = (dec, us) => (state.fmt === "us" ? signed(us) : dec.toFixed(2));
 
 function countBy(rows, fn) {
@@ -529,34 +343,9 @@ function countBy(rows, fn) {
   return out;
 }
 
-function esc(s) {
-  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-}
-
-function setStatus(msg, kind = "") {
-  const el = $("status");
-  el.textContent = msg;
-  el.className = `status ${kind}`;
-}
-
 // ---------- wiring ----------
 
-function initTheme() {
-  const saved = store.get("theme");
-  if (saved) document.documentElement.dataset.theme = saved;
-  $("themeToggle").addEventListener("click", () => {
-    const dark = document.documentElement.dataset.theme
-      ? document.documentElement.dataset.theme === "dark"
-      : matchMedia("(prefers-color-scheme: dark)").matches;
-    const next = dark ? "light" : "dark";
-    document.documentElement.dataset.theme = next;
-    store.set("theme", next);
-  });
-}
-
 function initSettings() {
-  $("apiKey").value = store.get("apiKey", "");
-  $("lookahead").value = state.lookahead ?? "";
   $("minBooks").value = state.minBooks;
 
   $("bookChecks").innerHTML = ALL_BOOKS.map((b) =>
@@ -571,16 +360,6 @@ function initSettings() {
     store.set("minBooks", state.minBooks);
     recompute();
   });
-  $("lookahead").addEventListener("change", () => {
-    const v = parseFloat($("lookahead").value);
-    state.lookahead = Number.isFinite(v) ? v : null;
-    store.set("lookahead", state.lookahead);
-  });
-  $("rememberKey").addEventListener("change", (e) => { if (!e.target.checked) store.del("apiKey"); });
-
-  $("fetchLive").addEventListener("click", fetchLive);
-  $("loadSnapshot").addEventListener("click", loadSnapshot);
-  $("fileInput").addEventListener("change", (e) => { if (e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ""; });
   $("downloadJson").addEventListener("click", () => {
     if (!state.events.length) return setStatus("Nothing to save yet.", "warn");
     download(new Blob([JSON.stringify(state.events)], { type: "application/json" }), `nba_player_props_${dateStamp()}.json`);
@@ -630,4 +409,4 @@ initSettings();
 initTable();
 renderSummary();
 renderTable();
-loadSnapshot();
+initDataSource(setData);

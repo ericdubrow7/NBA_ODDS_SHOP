@@ -8,13 +8,17 @@ For every NBA player-prop line (Points, Rebounds, Assists, Threes), it:
 2. Averages the decimal odds across books offering the same player, market, side and line.
 3. Picks the book with the best price and shows how far it sits above the average.
 
-There's no server and no build step. It's just `index.html`, `styles.css`, `app.js` and a data snapshot.
+The **Arbitrage** page (`arbitrage.html`) pairs the best Over with the best Under for each line. It lists the pairs where betting both sides locks in a profit, and shows how to split a stake.
+
+There's no server and no build step. It's just HTML, CSS and JavaScript files plus a data snapshot.
 
 ## Files
 
 | Path | Purpose |
 | --- | --- |
-| `index.html`, `styles.css`, `app.js` | The app (all analysis runs in the browser) |
+| `index.html`, `app.js` | Line Shopper page (all analysis runs in the browser) |
+| `arbitrage.html`, `arbitrage.js` | Arbitrage page |
+| `common.js`, `styles.css` | Shared by both pages: sportsbook list, data loading, settings, styles |
 | `data/nba_player_props.json` | Snapshot loaded on page open (same format the notebook saves) |
 | `scripts/fetch_odds.py` | Refreshes the snapshot from The Odds API (key from `ODDS_API_KEY`) |
 | `.github/workflows/refresh-odds.yml` | Optional GitHub Action that runs the script and commits the new snapshot |
