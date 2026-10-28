@@ -20,7 +20,7 @@ const STALE_MIN = 15;
 
 function findArbs(events, books) {
   const groups = new Map();
-  forEachPrice(events, books, ({ ev, book, market: m, outcome: o, updated }) => {
+  forEachPrice(events, books, ({ ev, book, market: m, outcome: o, updated, link }) => {
     if (o.name !== "Over" && o.name !== "Under") return;
     const key = [ev.id, m.key, o.description, o.point].join("|");
     let g = groups.get(key);
@@ -40,7 +40,7 @@ function findArbs(events, books) {
       groups.set(key, g);
     }
     g.counts[o.name]++;
-    if (!g[o.name] || o.price > g[o.name].price) g[o.name] = { price: o.price, book, updated };
+    if (!g[o.name] || o.price > g[o.name].price) g[o.name] = { price: o.price, book, updated, link };
   });
 
   const rows = [];
@@ -163,6 +163,36 @@ function tile(label, value, note) {
     `<div class="note" title="${esc(note)}">${esc(note) || "&nbsp;"}</div></div>`;
 }
 
+const LINK_LABELS = { slip: "Add to bet slip", market: "Open market", game: "Open game" };
+
+// Opens the bet at its book: the API's deep link when there is one, else the homepage.
+function openButton(q) {
+  const url = q.link ? q.link.url : BOOK_HOMEPAGES[q.book];
+  if (!url) return "";
+  const label = q.link ? LINK_LABELS[q.link.kind] : `Open ${q.book}`;
+  return `<a class="mini-btn${q.link?.kind === "slip" ? " primary" : ""}" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)} ↗</a>`;
+}
+
+// Clipboard API first; the textarea fallback covers browsers that refuse it.
+function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(text).catch(() => copyViaTextarea(text));
+  }
+  return copyViaTextarea(text);
+}
+
+function copyViaTextarea(text) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  const ok = document.execCommand("copy");
+  ta.remove();
+  return ok ? Promise.resolve() : Promise.reject(new Error("copy failed"));
+}
+
 function card(r) {
   const s = stakes(r, state.stake, state.stakeMode);
   const leg = (side, q, stake) => {
@@ -172,6 +202,9 @@ function card(r) {
       <div class="leg-book"><b>${esc(q.book)}</b> ${fmtOdds(q.price)}${q.book === "Novig" ? ` (${novigPct(q.price)})` : ""}</div>
       <div class="leg-stake">Bet <b>${money(stake)}</b></div>
       <div class="leg-age${age.stale ? " stale" : ""}">${esc(age.text)}</div>
+      <div class="leg-actions">${openButton(q)}
+        <button type="button" class="mini-btn" data-copy="${stake.toFixed(2)}" title="Copy stake to paste into the bet slip">Copy ${money(stake)}</button>
+      </div>
     </div>`;
   };
   const positive = r.roi > 1e-9;
@@ -222,6 +255,16 @@ function initPage() {
   for (const id of ["search", "fRoi"]) $(id).addEventListener("input", applyFilters);
   for (const id of ["fGame", "fMarket"]) $(id).addEventListener("change", applyFilters);
   $("sortSel").addEventListener("change", (e) => { state.sort = e.target.value; applyFilters(); });
+  $("arbs").addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-copy]");
+    if (!btn) return;
+    const label = btn.textContent;
+    copyText(btn.dataset.copy).then(
+      () => { btn.textContent = "Copied ✓"; },
+      () => { btn.textContent = "Copy failed"; },
+    );
+    setTimeout(() => { btn.textContent = label; }, 1400);
+  });
 
   document.querySelectorAll(".seg button[data-fmt]").forEach((b) => {
     b.classList.toggle("on", b.dataset.fmt === state.fmt);

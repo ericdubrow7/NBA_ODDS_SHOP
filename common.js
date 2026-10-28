@@ -24,6 +24,18 @@ const BOOKS = {
   novig: "Novig",
 };
 const ALL_BOOKS = Object.values(BOOKS);
+// Fallback when the API returns no deep link (it doesn't return homepages).
+const BOOK_HOMEPAGES = {
+  FanDuel: "https://sportsbook.fanduel.com/",
+  DraftKings: "https://sportsbook.draftkings.com/",
+  BetMGM: "https://sports.betmgm.com/",
+  Caesars: "https://sportsbook.caesars.com/",
+  BetRivers: "https://www.betrivers.com/",
+  "Bally Bet": "https://www.ballybet.com/",
+  "theScore Bet": "https://thescore.bet/",
+  "Hard Rock Bet": "https://www.hardrock.bet/",
+  Novig: "https://novig.us/",
+};
 // Books that existed before a saved selection; anything newer starts checked.
 const ORIGINAL_BOOKS = ["FanDuel", "DraftKings", "BetMGM", "Caesars", "BetRivers"];
 const SNAPSHOT_URL = "data/nba_player_props.json";
@@ -62,11 +74,19 @@ function forEachPrice(events, books, fn) {
         if (!(m.key in MARKETS)) continue;
         for (const o of m.outcomes || []) {
           if (o.point == null || o.price == null || o.price <= 1) continue;
-          fn({ ev, book, market: m, outcome: o, updated: m.last_update || bm.last_update });
+          fn({ ev, book, market: m, outcome: o, updated: m.last_update || bm.last_update, link: deepLink(bm, m, o) });
         }
       }
     }
   }
+}
+
+// Deepest link the API gave (fetched with includeLinks): the bet slip, then the
+// market, then the game. Only https URLs are used since they become hrefs.
+function deepLink(bm, m, o) {
+  const pick = [[o.link, "slip"], [m.link, "market"], [bm.link, "game"]]
+    .find(([url]) => typeof url === "string" && url.startsWith("https://"));
+  return pick ? { url: pick[0], kind: pick[1] } : null;
 }
 
 // ---------- data loading ----------
@@ -112,6 +132,7 @@ async function fetchLiveEvents(key, hours, report) {
         markets: Object.keys(MARKETS).join(","),
         oddsFormat: "decimal",
         dateFormat: "iso",
+        includeLinks: "true",
       });
       data.push(r.json);
       remaining = r.remaining;

@@ -43,7 +43,7 @@ def main():
     for i, event in enumerate(events, start=1):
         r = requests.get(
             f"https://api.the-odds-api.com/v4/sports/{SPORT}/events/{event['id']}/odds",
-            params={"apiKey": api_key, "bookmakers": BOOKMAKERS, "markets": MARKETS, "oddsFormat": "decimal", "dateFormat": "iso"},
+            params={"apiKey": api_key, "bookmakers": BOOKMAKERS, "markets": MARKETS, "oddsFormat": "decimal", "dateFormat": "iso", "includeLinks": "true"},
         )
         if r.status_code != 200:
             print(f"Failed {event['id']}: {r.status_code} {r.text[:200]}")

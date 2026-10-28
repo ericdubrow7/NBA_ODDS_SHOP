@@ -163,12 +163,20 @@ tbody tr:hover td.best { background: var(--best-bg); }
 
 /* Arbitrage page legs (see arbitrage.js card). */
 .legs { display: grid; gap: 6px; margin-top: 10px; }
-.leg { display: grid; grid-template-columns: 76px 1fr auto; grid-template-areas: "side book stake" "side age stake"; gap: 0 10px; align-items: center; background: var(--surface-2); border-radius: 6px; padding: 6px 10px; font-variant-numeric: tabular-nums; }
+.leg { display: grid; grid-template-columns: 76px 1fr auto; grid-template-areas: "side book stake" "side age stake" "actions actions actions"; gap: 0 10px; align-items: center; background: var(--surface-2); border-radius: 6px; padding: 6px 10px; font-variant-numeric: tabular-nums; }
 .leg-side { grid-area: side; font-weight: 700; }
 .leg-book { grid-area: book; }
 .leg-stake { grid-area: stake; text-align: right; }
 .leg-age { grid-area: age; color: var(--muted); font-size: 12px; }
 .leg-age.stale { color: var(--warn); }
+.leg-actions { grid-area: actions; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.mini-btn {
+  font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
+  min-height: 30px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); text-decoration: none; white-space: nowrap;
+}
+.mini-btn:hover { border-color: var(--accent); }
+.mini-btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 .card-edge.arb-pos { background: var(--best-bg); color: var(--best-text); border-color: transparent; }
 .card-edge.arb-neg { color: var(--muted); }
 
