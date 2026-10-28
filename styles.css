@@ -201,7 +201,8 @@ tbody tr:hover td.best { background: var(--best-bg); }
   .filters .inline input { flex: 1; width: auto; }
   .seg { display: flex; }
   .seg button { flex: 1; }
-  .filters #exportCsv { grid-column: 1 / -1; justify-content: center; }
+  .filters #exportCsv, .filters .stake-field { grid-column: 1 / -1; justify-content: center; }
+  .filters .stake-field select { flex: none; }
   .cards { grid-template-columns: 1fr; }
 
   .table-foot { flex-direction: column; align-items: stretch; text-align: center; }

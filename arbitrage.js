@@ -10,6 +10,7 @@ const state = {
   books: initialBooks(),
   fmt: store.get("fmt", "us"),
   stake: store.get("arbStake", 100),
+  stakeMode: store.get("arbStakeMode", "total"), // "total", "Over" or "Under"
   sort: "roi",
 };
 
@@ -51,12 +52,16 @@ function findArbs(events, books) {
   return rows;
 }
 
-// Splits `total` so both legs pay the same: stake_i = total * (1/price_i) / implied.
-function stakes(r, total) {
-  const over = (total / r.Over.price) / r.implied;
-  const under = (total / r.Under.price) / r.implied;
-  const payout = total / r.implied;
-  return { over, under, payout, profit: payout - total };
+// Sizes both legs to pay the same. `amount` is the total stake, or the stake on the
+// Over/Under side when `mode` names one; the other leg is sized to match its payout.
+function stakes(r, amount, mode) {
+  const payout = mode === "Over" ? amount * r.Over.price
+    : mode === "Under" ? amount * r.Under.price
+    : amount / r.implied;
+  const over = payout / r.Over.price;
+  const under = payout / r.Under.price;
+  const total = over + under;
+  return { over, under, total, payout, profit: payout - total };
 }
 
 // ---------- data ----------
@@ -119,6 +124,8 @@ function fillSelect(sel, allLabel, opts) {
 
 const fmtOdds = (dec) => (state.fmt === "us" ? signed(Math.round(decimalToUs(dec))) : dec.toFixed(2));
 const money = (n) => `$${n.toFixed(2)}`;
+// Novig quotes prices as win probability, so show that alongside its odds.
+const novigPct = (dec) => `${(100 / dec).toFixed(1)}%`;
 
 function ago(iso) {
   const t = Date.parse(iso || "");
@@ -135,7 +142,8 @@ function render() {
   $("tiles").innerHTML = [
     tile("Arbitrage spots", arbs.length, state.source || "no data"),
     tile("Best return", best ? `${best.roi.toFixed(2)}%` : "–", best ? `${best.player} ${best.line} ${best.market}` : ""),
-    tile(`Profit on ${money(state.stake)}`, best ? money(stakes(best, state.stake).profit) : "–", best ? "best spot" : ""),
+    tile(state.stakeMode === "total" ? `Profit on ${money(state.stake)}` : `Profit, ${money(state.stake)} on ${state.stakeMode}`,
+      best ? money(stakes(best, state.stake, state.stakeMode).profit) : "–", best ? "best spot" : ""),
     tile("Over/Under pairs checked", state.rows.length.toLocaleString(), `${state.books.length} books`),
   ].join("");
 
@@ -156,12 +164,12 @@ function tile(label, value, note) {
 }
 
 function card(r) {
-  const s = stakes(r, state.stake);
+  const s = stakes(r, state.stake, state.stakeMode);
   const leg = (side, q, stake) => {
     const age = ago(q.updated);
     return `<div class="leg">
       <div class="leg-side">${side} ${r.line.toFixed(1)}</div>
-      <div class="leg-book"><b>${esc(q.book)}</b> ${fmtOdds(q.price)}</div>
+      <div class="leg-book"><b>${esc(q.book)}</b> ${fmtOdds(q.price)}${q.book === "Novig" ? ` (${novigPct(q.price)})` : ""}</div>
       <div class="leg-stake">Bet <b>${money(stake)}</b></div>
       <div class="leg-age${age.stale ? " stale" : ""}">${esc(age.text)}</div>
     </div>`;
@@ -178,7 +186,7 @@ function card(r) {
     </div>
     <div class="legs">${leg("Over", r.Over, s.over)}${leg("Under", r.Under, s.under)}</div>
     <div class="card-best">
-      <span>Total <b>${money(state.stake)}</b></span>
+      <span>Total <b>${money(s.total)}</b></span>
       <span>Payout <b>${money(s.payout)}</b></span>
       <span class="${positive ? "best-pick" : ""}">Profit <b>${s.profit >= 0 ? "+" : "−"}${money(Math.abs(s.profit))}</b></span>
       <span>${r.counts.Over} / ${r.counts.Under} books quoting</span>
@@ -203,6 +211,12 @@ function initPage() {
     if (!(v > 0)) return;
     state.stake = v;
     store.set("arbStake", v);
+    render();
+  });
+  $("stakeMode").value = state.stakeMode;
+  $("stakeMode").addEventListener("change", () => {
+    state.stakeMode = $("stakeMode").value;
+    store.set("arbStakeMode", state.stakeMode);
     render();
   });
   for (const id of ["search", "fRoi"]) $(id).addEventListener("input", applyFilters);

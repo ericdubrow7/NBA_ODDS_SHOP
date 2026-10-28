@@ -65,7 +65,14 @@
           <option value="start">Sort: Game time</option>
           <option value="player">Sort: Player</option>
         </select>
-        <label class="inline">Total stake $ <input id="stake" type="number" min="1" step="10" value="100"></label>
+        <label class="inline stake-field">Stake on
+          <select id="stakeMode" aria-label="Stake applies to">
+            <option value="total">Total</option>
+            <option value="Over">Over bet</option>
+            <option value="Under">Under bet</option>
+          </select>
+          $ <input id="stake" type="number" min="1" step="10" value="100">
+        </label>
         <label class="inline">Min return % <input id="fRoi" type="number" step="0.25" value="0"></label>
         <div class="seg" role="group" aria-label="Odds format">
           <button type="button" data-fmt="us" class="on">American</button>
@@ -77,7 +84,7 @@
     </section>
 
     <footer class="foot">
-      <p><strong>How it works:</strong> for each player, market and line, the best Over and best Under across your selected books are paired. When the two implied probabilities add up to less than 100%, splitting the stake as shown pays the same whichever side wins. <em>Return</em> is profit as a share of the total stake.</p>
+      <p><strong>How it works:</strong> for each player, market and line, the best Over and best Under across your selected books are paired. When the two implied probabilities add up to less than 100%, splitting the stake as shown pays the same whichever side wins. Set the total to split, or set the Over or Under bet and the other side is sized to match. <em>Return</em> is profit as a share of the total stake. Novig prices also show Novig's win-probability % in parentheses.</p>
       <p><strong>Before you bet:</strong> confirm both prices are still live and the line matches exactly. Check each book's limits and its rules for players who don't play. Odds marked in orange haven't updated in over 15 minutes.</p>
     </footer>
   </main>
