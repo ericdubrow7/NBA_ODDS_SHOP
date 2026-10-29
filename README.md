@@ -1,14 +1,16 @@
-# NBA Prop Line Shopper
+# NBA & WNBA Prop Line Shopper
 
 A static web version of `NBA Odds Analysis - Player Props Avg vs Best Book.ipynb`.
 
-For every NBA player-prop line (Points, Rebounds, Assists, Threes), it:
+For every NBA and WNBA player-prop line (Points, Rebounds, Assists, Threes), it:
 
 1. Collects Over/Under prices from FanDuel, DraftKings, BetMGM, Caesars, BetRivers, Bally Bet, theScore Bet (formerly ESPN BET), Hard Rock Bet and Novig.
 2. Averages the decimal odds across books offering the same player, market, side and line.
 3. Picks the book with the best price and shows how far it sits above the average.
 
 The **Arbitrage** page (`arbitrage.html`) pairs the best Over with the best Under for each line. It lists the pairs where betting both sides locks in a profit, and shows how to split a stake.
+
+Pick NBA, WNBA or both under *Data source & settings*. The choice applies to both pages and decides which leagues a live fetch requests.
 
 There's no server and no build step. It's just HTML, CSS and JavaScript files plus a data snapshot.
 
@@ -19,14 +21,14 @@ There's no server and no build step. It's just HTML, CSS and JavaScript files pl
 | `index.html`, `app.js` | Line Shopper page (all analysis runs in the browser) |
 | `arbitrage.html`, `arbitrage.js` | Arbitrage page |
 | `common.js`, `styles.css` | Shared by both pages: sportsbook list, data loading, settings, styles |
-| `data/nba_player_props.json` | Snapshot loaded on page open (same format the notebook saves) |
+| `data/player_props.json` | Snapshot loaded on page open, both leagues (same format the notebook saves) |
 | `scripts/fetch_odds.py` | Refreshes the snapshot from The Odds API (key from `ODDS_API_KEY`) |
 | `.github/workflows/refresh-odds.yml` | Optional GitHub Action that runs the script and commits the new snapshot |
 
 ## Getting data into the app
 
-- **Snapshot (default):** the page loads `data/nba_player_props.json` automatically. To update it, replace the file with the notebook's `nba_player_props.json`, run `scripts/fetch_odds.py`, or use the GitHub Action.
-- **Live:** open *Data source & settings*, paste your Odds API key, and click *Fetch live odds*. The key is stored only in your browser's localStorage, and only if you tick "Remember". It's sent only to `api.the-odds-api.com`. Each game costs about 4 credits.
+- **Snapshot (default):** the page loads `data/player_props.json` automatically. To update it, replace the file with the notebook's `nba_player_props.json`, run `scripts/fetch_odds.py` (both leagues by default; `--leagues nba` or `--leagues wnba` for one), or use the GitHub Action.
+- **Live:** open *Data source & settings*, paste your Odds API key, and click *Fetch live odds*. The key is stored only in your browser's localStorage, and only if you tick "Remember". It's sent only to `api.the-odds-api.com`. Each game costs about 4 credits, and only the checked leagues are fetched.
 - **File:** *Open JSON file* loads any JSON saved by the notebook.
 
 > Don't hard-code your API key into `app.js`. On a public static site anyone can read it.

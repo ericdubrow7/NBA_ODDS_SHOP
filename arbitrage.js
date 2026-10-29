@@ -1,4 +1,4 @@
-// NBA Player Props: arbitrage finder.
+// NBA/WNBA Player Props: arbitrage finder.
 // For each player/market/line, pairs the best Over with the best Under across the
 // selected books. If 1/over + 1/under < 1, backing both sides locks in a profit.
 
@@ -27,6 +27,7 @@ function findArbs(events, books) {
     if (!g) {
       g = {
         id: ev.id,
+        league: leagueOf(ev),
         start: ev.commence_time,
         home: ev.home_team,
         away: ev.away_team,
@@ -108,7 +109,7 @@ function populateFilterOptions() {
   const games = new Map();
   for (const r of state.rows) if (!games.has(r.id)) games.set(r.id, r);
   const gameOpts = [...games.values()].sort((a, b) => a.start.localeCompare(b.start))
-    .map((r) => [r.id, `${r.away} @ ${r.home} · ${fmtGameTime(r.start)}`]);
+    .map((r) => [r.id, `${leagueTag(r)}${r.away} @ ${r.home} · ${fmtGameTime(r.start)}`]);
   fillSelect($("fGame"), "All games", gameOpts);
   fillSelect($("fMarket"), "All markets", Object.values(MARKETS).map((m) => [m, m]));
 }
@@ -149,6 +150,7 @@ function render() {
 
   if (!rows.length) {
     const msg = !state.events.length ? "No data loaded yet."
+      : noLeagueGames(state.events) ? noLeagueGames(state.events)
       : state.rows.some((r) => r.roi > 1e-9) ? "No spots match these filters."
       : "No arbitrage in this data. Fetch live odds, or set Min return below 0% to see the closest near-misses.";
     $("arbs").innerHTML = `<div class="empty">${esc(msg)}</div>`;
@@ -203,7 +205,7 @@ function card(r) {
       <div>
         <div class="card-player">${esc(r.player)}</div>
         <div class="card-prop">${r.line.toFixed(1)} ${esc(r.market)}</div>
-        <div class="card-game">${esc(r.away)} @ ${esc(r.home)} · ${esc(fmtGameTime(r.start))}</div>
+        <div class="card-game">${esc(leagueTag(r))}${esc(r.away)} @ ${esc(r.home)} · ${esc(fmtGameTime(r.start))}</div>
       </div>
       <div class="card-edge ${positive ? "arb-pos" : "arb-neg"}">${positive ? "+" : ""}${r.roi.toFixed(2)}%</div>
     </div>
@@ -268,6 +270,7 @@ function initPage() {
 }
 
 initTheme();
+initLeagues(recompute);
 initPage();
 render();
 initDataSource(setData);

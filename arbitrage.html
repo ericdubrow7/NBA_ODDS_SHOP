@@ -3,16 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>NBA Prop Arbitrage</title>
-  <meta name="description" content="NBA player props: Over/Under pairs across sportsbooks that lock in a profit.">
+  <title>NBA & WNBA Prop Arbitrage</title>
+  <meta name="description" content="NBA and WNBA player props: Over/Under pairs across sportsbooks that lock in a profit.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏀</text></svg>">
-  <link rel="stylesheet" href="styles.css?v=20261029">
+  <link rel="stylesheet" href="styles.css?v=20261029b">
 </head>
 <body>
   <header class="topbar">
     <div class="wrap topbar-inner">
       <div>
-        <h1>NBA Prop Arbitrage</h1>
+        <h1><span class="league-name">NBA &amp; WNBA</span> Prop Arbitrage</h1>
         <p class="sub">Over/Under pairs across books where betting both sides locks in a profit</p>
       </div>
       <nav class="nav" aria-label="Pages">
@@ -37,6 +37,11 @@
           <input id="lookahead" type="number" min="1" step="1" value="48">
           <small>Blank = all upcoming games</small>
         </label>
+        <fieldset class="field">
+          <legend>Leagues</legend>
+          <div id="leagueChecks" class="book-checks"></div>
+          <small>Fetches and shows only the leagues checked.</small>
+        </fieldset>
         <fieldset class="field">
           <legend>Sportsbooks</legend>
           <div id="bookChecks" class="book-checks"></div>
@@ -90,7 +95,7 @@
     </footer>
   </main>
 
-  <script src="common.js?v=20261029"></script>
-  <script src="arbitrage.js?v=20261029"></script>
+  <script src="common.js?v=20261029b"></script>
+  <script src="arbitrage.js?v=20261029b"></script>
 </body>
 </html>

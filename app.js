@@ -1,4 +1,4 @@
-// NBA Player Props: Average Odds vs Most Favorable Book
+// NBA/WNBA Player Props: Average Odds vs Most Favorable Book
 // Browser port of "NBA Odds Analysis - Player Props Avg vs Best Book.ipynb".
 
 const PAGE_SIZE = 150;
@@ -26,6 +26,7 @@ function buildComparison(events, books, minBooks) {
     if (!line) {
       line = {
         id: ev.id,
+        league: leagueOf(ev),
         start: ev.commence_time,
         home: ev.home_team,
         away: ev.away_team,
@@ -138,7 +139,7 @@ function populateFilterOptions() {
   const games = new Map();
   for (const r of state.rows) if (!games.has(r.id)) games.set(r.id, r);
   const gameOpts = [...games.values()].sort((a, b) => a.start.localeCompare(b.start))
-    .map((r) => [r.id, `${r.away} @ ${r.home} · ${fmtGameTime(r.start)}`]);
+    .map((r) => [r.id, `${leagueTag(r)}${r.away} @ ${r.home} · ${fmtGameTime(r.start)}`]);
   fillSelect($("fGame"), "All games", gameOpts);
   fillSelect($("fMarket"), "All markets", Object.values(MARKETS).map((m) => [m, m]));
   fillSelect($("fBook"), "Any best book", state.books.map((b) => [b, b]));
@@ -241,14 +242,14 @@ function renderTable() {
   } else if (!rows.length) {
     renderHead();
     $("body").innerHTML = `<tr><td class="empty" colspan="${cols.length}">${
-      state.events.length ? "No lines match these filters." : "No data loaded yet."}</td></tr>`;
+      noLeagueGames(state.events) || (state.events.length ? "No lines match these filters." : "No data loaded yet.")}</td></tr>`;
   } else {
     renderHead();
     $("body").innerHTML = rows.map((r) => {
       const cells = cols.map((c) => {
         switch (c.key) {
           case "start":
-            return `<td class="l game">${esc(r.away)} @ ${esc(r.home)}<br>${esc(fmtGameTime(r.start))}</td>`;
+            return `<td class="l game">${esc(leagueTag(r))}${esc(r.away)} @ ${esc(r.home)}<br>${esc(fmtGameTime(r.start))}</td>`;
           case "player": return `<td class="l player">${esc(r.player)}</td>`;
           case "market": return `<td>${esc(r.market)}</td>`;
           case "side": return `<td>${esc(r.side)}</td>`;
@@ -279,7 +280,7 @@ function renderTable() {
 
 function renderCards(rows, maxPct) {
   if (!rows.length) {
-    $("cards").innerHTML = `<div class="empty">${state.events.length ? "No lines match these filters." : "No data loaded yet."}</div>`;
+    $("cards").innerHTML = `<div class="empty">${esc(noLeagueGames(state.events) || (state.events.length ? "No lines match these filters." : "No data loaded yet."))}</div>`;
     return;
   }
   const isUs = state.fmt === "us";
@@ -293,7 +294,7 @@ function renderCards(rows, maxPct) {
         <div>
           <div class="card-player">${esc(r.player)}</div>
           <div class="card-prop">${esc(r.side)} ${r.line.toFixed(1)} ${esc(r.market)}</div>
-          <div class="card-game">${esc(r.away)} @ ${esc(r.home)} · ${esc(fmtGameTime(r.start))}</div>
+          <div class="card-game">${esc(leagueTag(r))}${esc(r.away)} @ ${esc(r.home)} · ${esc(fmtGameTime(r.start))}</div>
         </div>
         <div class="card-edge" style="${edgeStyle(r.pct, maxPct)}">${r.pct.toFixed(2)}%</div>
       </div>
@@ -316,13 +317,13 @@ function edgeStyle(pct, maxPct) {
 }
 
 function exportCsv() {
-  const header = ["Start (ET)", "Home", "Away", "Market", "Player", "Side", "Line",
+  const header = ["League", "Start (ET)", "Home", "Away", "Market", "Player", "Side", "Line",
     ...state.books.map((b) => `${b} (US)`), ...state.books.map((b) => `${b} (Dec)`),
     "Books", "Avg Decimal", "Avg US", "Best Book", "Best Decimal", "Best US", "Decimal vs Avg", "US vs Avg", "% vs Avg"];
   const lines = [header];
   for (const r of state.filtered) {
     lines.push([
-      fmtGameTime(r.start), r.home, r.away, r.market, r.player, r.side, r.line,
+      r.league, fmtGameTime(r.start), r.home, r.away, r.market, r.player, r.side, r.line,
       ...state.books.map((b) => (r.prices[b] != null ? Math.round(decimalToUs(r.prices[b])) : "")),
       ...state.books.map((b) => r.prices[b] ?? ""),
       r.booksOffering, r.avg.toFixed(3), r.avgUs, r.bestBook, r.best.toFixed(3), r.bestUs,
@@ -330,7 +331,7 @@ function exportCsv() {
     ]);
   }
   const csv = lines.map((row) => row.map(csvCell).join(",")).join("\r\n");
-  download(new Blob([csv], { type: "text/csv" }), `nba_player_props_best_book_${dateStamp()}.csv`);
+  download(new Blob([csv], { type: "text/csv" }), `player_props_best_book_${dateStamp()}.csv`);
 }
 
 function csvCell(v) {
@@ -377,7 +378,7 @@ function initSettings() {
   });
   $("downloadJson").addEventListener("click", () => {
     if (!state.events.length) return setStatus("Nothing to save yet.", "warn");
-    download(new Blob([JSON.stringify(state.events)], { type: "application/json" }), `nba_player_props_${dateStamp()}.json`);
+    download(new Blob([JSON.stringify(state.events)], { type: "application/json" }), `player_props_${dateStamp()}.json`);
   });
 }
 
@@ -420,6 +421,7 @@ function initTable() {
 }
 
 initTheme();
+initLeagues(recompute);
 initSettings();
 initTable();
 renderSummary();

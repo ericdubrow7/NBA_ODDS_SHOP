@@ -2,7 +2,11 @@
 // Load before the page script (app.js, arbitrage.js).
 
 const API_BASE = "https://api.the-odds-api.com/v4";
-const SPORT = "basketball_nba";
+// Odds API sport key -> league label. Both use the same player-prop markets.
+const LEAGUES = {
+  basketball_nba: "NBA",
+  basketball_wnba: "WNBA",
+};
 const MARKETS = {
   player_points: "Points",
   player_rebounds: "Rebounds",
@@ -38,7 +42,7 @@ const BOOK_HOMEPAGES = {
 };
 // Books that existed before a saved selection; anything newer starts checked.
 const ORIGINAL_BOOKS = ["FanDuel", "DraftKings", "BetMGM", "Caesars", "BetRivers"];
-const SNAPSHOT_URL = "data/nba_player_props.json";
+const SNAPSHOT_URL = "data/player_props.json";
 const REQUEST_SLEEP_MS = 300;
 
 const store = {
@@ -57,6 +61,26 @@ function initialBooks() {
   return ALL_BOOKS.filter((b) => saved.includes(b) || !known.includes(b));
 }
 
+// Selected league keys, shared by both pages: what gets fetched and what's shown.
+let leagues = initialLeagues();
+
+function initialLeagues() {
+  const saved = store.get("leagues");
+  const valid = Array.isArray(saved) ? saved.filter((k) => k in LEAGUES) : [];
+  return valid.length ? valid : Object.keys(LEAGUES);
+}
+
+// Older snapshots predate WNBA and may lack sport_key; those are all NBA.
+const leagueKey = (ev) => ev.sport_key || "basketball_nba";
+const leagueOf = (ev) => LEAGUES[leagueKey(ev)] || ev.sport_title || "NBA";
+const leaguesLabel = () => leagues.map((k) => LEAGUES[k]).join(" & ");
+// "WNBA · " prefix for game labels, only needed when more than one league is shown.
+const leagueTag = (r) => (leagues.length > 1 ? `${r.league} · ` : "");
+// Empty-state text when data is loaded but none of it is in the checked leagues.
+const noLeagueGames = (events) => (events.length && !events.some((ev) => leagues.includes(leagueKey(ev)))
+  ? `No ${leaguesLabel()} games in the loaded odds. Fetch live odds, or check another league in Data source & settings.`
+  : "");
+
 const $ = (id) => document.getElementById(id);
 
 function decimalToUs(d) {
@@ -64,9 +88,10 @@ function decimalToUs(d) {
   return d >= 2 ? (d - 1) * 100 : -100 / (d - 1);
 }
 
-// Walks every usable price: selected books only, skipping Novig's 1.0 "no price".
+// Walks every usable price: selected leagues and books only, skipping Novig's 1.0 "no price".
 function forEachPrice(events, books, fn) {
   for (const ev of events) {
+    if (!leagues.includes(leagueKey(ev))) continue;
     for (const bm of ev.bookmakers || []) {
       const book = BOOKS[bm.key];
       if (!book || !books.includes(book)) continue;
@@ -120,17 +145,26 @@ async function apiGet(path, params) {
 
 // Returns { data, total, remaining }, or null if there was nothing to fetch or the user cancelled.
 async function fetchLiveEvents(key, hours, report) {
-  report("Looking up upcoming NBA games…");
-  const { json: allEvents } = await apiGet(`/sports/${SPORT}/events`, { apiKey: key });
+  const label = leaguesLabel();
+  report(`Looking up upcoming ${label} games…`);
   const cutoff = Number.isFinite(hours) ? Date.now() + hours * 3600e3 : Infinity;
-  const events = allEvents.filter((e) => new Date(e.commence_time).getTime() <= cutoff);
+  const events = [];
+  for (const sport of leagues) {
+    try {
+      const { json: found } = await apiGet(`/sports/${sport}/events`, { apiKey: key });
+      events.push(...found.filter((e) => new Date(e.commence_time).getTime() <= cutoff));
+    } catch (err) {
+      if (leagues.length === 1) throw err;
+      console.warn(`No ${LEAGUES[sport]} events`, err); // e.g. off-season; still fetch the other league
+    }
+  }
   if (!events.length) {
-    report("No NBA games in that window.", "warn");
+    report(`No ${label} games in that window.`, "warn");
     return null;
   }
 
   const cost = events.length * Object.keys(MARKETS).length;
-  if (!confirm(`Fetch player props for ${events.length} game(s)? This uses about ${cost} API credits.`)) {
+  if (!confirm(`Fetch ${label} player props for ${events.length} game(s)? This uses about ${cost} API credits.`)) {
     report("Cancelled.");
     return null;
   }
@@ -140,7 +174,7 @@ async function fetchLiveEvents(key, hours, report) {
   for (let i = 0; i < events.length; i++) {
     report(`Fetching game ${i + 1} of ${events.length}…`);
     try {
-      const r = await apiGet(`/sports/${SPORT}/events/${events[i].id}/odds`, {
+      const r = await apiGet(`/sports/${events[i].sport_key}/events/${events[i].id}/odds`, {
         apiKey: key,
         bookmakers: Object.keys(BOOKS).join(","),
         markets: Object.keys(MARKETS).join(","),
@@ -230,6 +264,29 @@ async function fetchLive(setData) {
   } finally {
     btn.disabled = false;
   }
+}
+
+// Puts the selected leagues in the page title and heading.
+function renderLeagueName() {
+  const label = leaguesLabel();
+  document.querySelectorAll(".league-name").forEach((el) => { el.textContent = label; });
+  document.title = document.title.replace(/^.*? Prop /, `${label} Prop `);
+}
+
+// League checkboxes in the settings panel; `onChange` re-renders the page.
+function initLeagues(onChange) {
+  const box = $("leagueChecks");
+  box.innerHTML = Object.entries(LEAGUES).map(([k, name]) =>
+    `<label><input type="checkbox" value="${esc(k)}" ${leagues.includes(k) ? "checked" : ""}> ${esc(name)}</label>`).join("");
+  box.addEventListener("change", (e) => {
+    const picked = [...box.querySelectorAll("input:checked")].map((i) => i.value);
+    if (!picked.length) { e.target.checked = true; return; } // keep at least one league
+    leagues = picked;
+    store.set("leagues", leagues);
+    renderLeagueName();
+    onChange();
+  });
+  renderLeagueName();
 }
 
 // Wires the shared data-source controls (key, look-ahead, fetch/snapshot/file buttons).
