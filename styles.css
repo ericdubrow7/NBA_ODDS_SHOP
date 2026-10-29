@@ -160,6 +160,9 @@ tbody tr:hover td.best { background: var(--best-bg); }
 .chip { display: inline-flex; gap: 6px; padding: 4px 8px; border-radius: 6px; background: var(--surface-2); font-size: 12px; font-variant-numeric: tabular-nums; }
 .chip b { font-weight: 700; }
 .chip.best { background: var(--best-bg); color: var(--best-text); }
+.odds-link { color: inherit; text-decoration: underline dotted; text-underline-offset: 3px; }
+.odds-link:hover { text-decoration-style: solid; }
+td .mini-btn { min-height: 0; padding: 2px 8px; }
 
 /* Arbitrage page legs (see arbitrage.js card). */
 .legs { display: grid; gap: 6px; margin-top: 10px; }

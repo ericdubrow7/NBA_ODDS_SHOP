@@ -20,7 +20,7 @@ const state = {
 
 function buildComparison(events, books, minBooks) {
   const lines = new Map();
-  forEachPrice(events, books, ({ ev, book, market: m, outcome: o }) => {
+  forEachPrice(events, books, ({ ev, book, market: m, outcome: o, link }) => {
     const key = [ev.id, m.key, o.description, o.name, o.point].join("|");
     let line = lines.get(key);
     if (!line) {
@@ -34,10 +34,14 @@ function buildComparison(events, books, minBooks) {
         side: o.name,
         line: o.point,
         prices: {},
+        links: {},
       };
       lines.set(key, line);
     }
-    if (!(book in line.prices)) line.prices[book] = o.price;
+    if (!(book in line.prices)) {
+      line.prices[book] = o.price;
+      line.links[book] = link;
+    }
   });
 
   const rows = [];
@@ -251,7 +255,7 @@ function renderTable() {
           case "line": return `<td>${r.line.toFixed(1)}</td>`;
           case "booksOffering": return `<td>${r.booksOffering}</td>`;
           case "avg": return `<td>${fmtOdds(r.avg, r.avgUs)}</td>`;
-          case "bestBook": return `<td class="l best">${esc(r.bestBook)}</td>`;
+          case "bestBook": return `<td class="l best">${openButton(r.bestBook, r.links[r.bestBook], true)}</td>`;
           case "best": return `<td class="best">${fmtOdds(r.best, r.bestUs)}</td>`;
           case "usVsAvg":
             return `<td>${state.fmt === "us" ? signed(r.usVsAvg) : "+" + r.priceVsAvg.toFixed(3)}</td>`;
@@ -260,7 +264,7 @@ function renderTable() {
             const p = r.prices[c.key];
             if (p == null) return `<td class="na">–</td>`;
             const cls = p === r.best ? "best" : "";
-            return `<td class="${cls}">${fmtOdds(p, Math.round(decimalToUs(p)))}</td>`;
+            return `<td class="${cls}">${oddsLink(r, c.key)}</td>`;
           }
         }
       });
@@ -282,7 +286,7 @@ function renderCards(rows, maxPct) {
   $("cards").innerHTML = rows.map((r) => {
     const chips = state.books.filter((b) => r.prices[b] != null).map((b) => {
       const p = r.prices[b];
-      return `<span class="chip${p === r.best ? " best" : ""}">${esc(b)} <b>${fmtOdds(p, Math.round(decimalToUs(p)))}</b></span>`;
+      return `<span class="chip${p === r.best ? " best" : ""}">${esc(b)} <b>${oddsLink(r, b)}</b></span>`;
     }).join("");
     return `<article class="card">
       <div class="card-top">
@@ -299,6 +303,7 @@ function renderCards(rows, maxPct) {
         <span>vs avg <b>${isUs ? signed(r.usVsAvg) : "+" + r.priceVsAvg.toFixed(3)}</b></span>
         <span><b>${r.booksOffering}</b> books</span>
       </div>
+      <div class="leg-actions">${openButton(r.bestBook, r.links[r.bestBook])}</div>
       <div class="card-books">${chips}</div>
     </article>`;
   }).join("");
@@ -336,6 +341,16 @@ function csvCell(v) {
 // ---------- formatting helpers ----------
 
 const fmtOdds = (dec, us) => (state.fmt === "us" ? signed(us) : dec.toFixed(2));
+
+// A book's price for a line, linked to that bet at the book (bet slip when the API gave one).
+function oddsLink(r, book) {
+  const p = r.prices[book];
+  const text = fmtOdds(p, Math.round(decimalToUs(p)));
+  const link = r.links[book];
+  const url = betUrl(book, link);
+  if (!url) return text;
+  return `<a class="odds-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="${esc(betTitle(book, link))}">${text}</a>`;
+}
 
 function countBy(rows, fn) {
   const out = {};

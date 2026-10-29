@@ -89,6 +89,20 @@ function deepLink(bm, m, o) {
   return pick ? { url: pick[0], kind: pick[1] } : null;
 }
 
+const LINK_LABELS = { slip: "Add to bet slip", market: "Open market", game: "Open game" };
+
+// Where a price at `book` opens: the API's deep link when there is one, else the homepage.
+const betUrl = (book, link) => (link ? link.url : BOOK_HOMEPAGES[book]);
+const betTitle = (book, link) => (link ? `${LINK_LABELS[link.kind]} at ${book}` : `Open ${book}`);
+
+// Button that opens a bet at its book; `short` drops the label to just the book name.
+function openButton(book, link, short = false) {
+  const url = betUrl(book, link);
+  if (!url) return "";
+  const label = short ? book : link ? LINK_LABELS[link.kind] : `Open ${book}`;
+  return `<a class="mini-btn${link?.kind === "slip" ? " primary" : ""}" href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="${esc(betTitle(book, link))}">${esc(label)} ↗</a>`;
+}
+
 // ---------- data loading ----------
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

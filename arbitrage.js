@@ -163,16 +163,6 @@ function tile(label, value, note) {
     `<div class="note" title="${esc(note)}">${esc(note) || "&nbsp;"}</div></div>`;
 }
 
-const LINK_LABELS = { slip: "Add to bet slip", market: "Open market", game: "Open game" };
-
-// Opens the bet at its book: the API's deep link when there is one, else the homepage.
-function openButton(q) {
-  const url = q.link ? q.link.url : BOOK_HOMEPAGES[q.book];
-  if (!url) return "";
-  const label = q.link ? LINK_LABELS[q.link.kind] : `Open ${q.book}`;
-  return `<a class="mini-btn${q.link?.kind === "slip" ? " primary" : ""}" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)} ↗</a>`;
-}
-
 // Clipboard API first; the textarea fallback covers browsers that refuse it.
 function copyText(text) {
   if (navigator.clipboard && window.isSecureContext) {
@@ -202,7 +192,7 @@ function card(r) {
       <div class="leg-book"><b>${esc(q.book)}</b> ${fmtOdds(q.price)}${q.book === "Novig" ? ` (${novigPct(q.price)})` : ""}</div>
       <div class="leg-stake">Bet <b>${money(stake)}</b></div>
       <div class="leg-age${age.stale ? " stale" : ""}">${esc(age.text)}</div>
-      <div class="leg-actions">${openButton(q)}
+      <div class="leg-actions">${openButton(q.book, q.link)}
         <button type="button" class="mini-btn" data-copy="${stake.toFixed(2)}" title="Copy stake to paste into the bet slip">Copy ${money(stake)}</button>
       </div>
     </div>`;
