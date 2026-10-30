@@ -24,6 +24,8 @@ There's no server and no build step. It's just HTML, CSS and JavaScript files pl
 | `data/player_props.json` | Snapshot loaded on page open, both leagues (same format the notebook saves) |
 | `scripts/fetch_odds.py` | Refreshes the snapshot from The Odds API (key from `ODDS_API_KEY`) |
 | `.github/workflows/refresh-odds.yml` | Optional GitHub Action that runs the script and commits the new snapshot |
+| `scripts/fetch_player_stats.py` | Player stats ingestion for the prediction model (see below) |
+| `notebooks/Component 2 - Player Stats Ingestion.ipynb` | Runs the stats ingestion step by step for inspection |
 
 ## Getting data into the app
 
@@ -32,6 +34,17 @@ There's no server and no build step. It's just HTML, CSS and JavaScript files pl
 - **File:** *Open JSON file* loads any JSON saved by the notebook.
 
 > Don't hard-code your API key into `app.js`. On a public static site anyone can read it.
+
+## Player stats for the prediction model
+
+`scripts/fetch_player_stats.py` is the data-ingestion step for the planned prediction model. It pulls player game logs (current and previous season), upcoming games, and the players in those games from ESPN's public API. It also checks that player names in the odds snapshot match the stats.
+
+```bash
+pip install pandas requests
+python scripts/fetch_player_stats.py --league nba   # or --league wnba
+```
+
+It writes CSVs to `model_data/`, which is gitignored along with its ESPN cache (about 60 MB per league). The first run takes 10-15 minutes, and later runs take seconds because finished games are cached. ESPN's API is unofficial and could change without notice.
 
 ## Run locally
 

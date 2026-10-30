@@ -1,0 +1,3 @@
+# Player stats outputs and ESPN cache (scripts/fetch_player_stats.py); local only for now.
+model_data/
+__pycache__/
