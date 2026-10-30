@@ -26,6 +26,8 @@ There's no server and no build step. It's just HTML, CSS and JavaScript files pl
 | `.github/workflows/refresh-odds.yml` | Optional GitHub Action that runs the script and commits the new snapshot |
 | `scripts/fetch_player_stats.py` | Player stats ingestion for the prediction model (see below) |
 | `notebooks/Component 2 - Player Stats Ingestion.ipynb` | Runs the stats ingestion step by step for inspection |
+| `scripts/build_features.py` | Feature engineering on the ingested stats, for every prop stat |
+| `notebooks/Component 2 - Feature Engineering.ipynb` | Runs the feature build and shows the features |
 
 ## Getting data into the app
 
@@ -44,7 +46,13 @@ pip install pandas requests
 python scripts/fetch_player_stats.py --league nba   # or --league wnba
 ```
 
-It writes CSVs to `model_data/`, which is gitignored along with its ESPN cache (about 60 MB per league). The first run takes 10-15 minutes, and later runs take seconds because finished games are cached. ESPN's API is unofficial and could change without notice.
+Then build model features for points, rebounds, assists and threes: rolling form, minutes and usage, shot volume, rest, teammates out, and opponent pace and defense (overall, vs league average, and by position):
+
+```bash
+python scripts/build_features.py --league nba
+```
+
+Both write CSVs to `model_data/`, which is gitignored along with its ESPN cache (about 60 MB per league). The first run takes 10-15 minutes, and later runs take seconds because finished games are cached. ESPN's API is unofficial and could change without notice.
 
 ## Run locally
 

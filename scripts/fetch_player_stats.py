@@ -52,6 +52,18 @@ def to_num(v):
         return None
 
 
+def season_year(league, day):
+    """ESPN season year a date falls in. NBA seasons are named by their end year."""
+    if league == "nba":
+        return day.year + 1 if day.month >= 8 else day.year
+    return day.year if day.month >= 5 else day.year - 1
+
+
+def season_label(league, year):
+    """ESPN names a season by its end year: NBA 2027 = 2026-27; WNBA seasons sit in one year."""
+    return f"{year - 1}-{str(year)[2:]}" if league == "nba" else str(year)
+
+
 class Ingest:
     def __init__(self, league="nba", seasons_back=1, season_types=(2,), request_sleep=0.2):
         """season_types are ESPN's: 2 = regular season, 3 = playoffs."""
@@ -72,8 +84,7 @@ class Ingest:
     # ---------- seasons ----------
 
     def season_label(self, year):
-        """ESPN names a season by its end year: NBA 2027 = 2026-27; WNBA seasons sit in one year."""
-        return f"{year - 1}-{str(year)[2:]}" if self.league == "nba" else str(year)
+        return season_label(self.league, year)
 
     def season_window(self, year):
         """Calendar dates that can hold games for an ESPN season year."""
@@ -82,10 +93,7 @@ class Ingest:
         return date(year, 5, 1), date(year, 10, 31)
 
     def current_season_year(self):
-        t = self.today
-        if self.league == "nba":
-            return t.year + 1 if t.month >= 8 else t.year
-        return t.year if t.month >= 5 else t.year - 1
+        return season_year(self.league, self.today)
 
     # ---------- requests ----------
 
@@ -124,7 +132,10 @@ class Ingest:
             day, n = start, 0
             while day <= end:
                 for e in self.scoreboard(day):
-                    if e["season"]["year"] == year and e["season"]["type"] in self.season_types and e["status"]["type"]["completed"]:
+                    # ESPN files All-Star games under the regular season; they'd skew player stats.
+                    all_star = (e["competitions"][0].get("type") or {}).get("abbreviation") == "ALLSTAR"
+                    if (e["season"]["year"] == year and e["season"]["type"] in self.season_types
+                            and e["status"]["type"]["completed"] and not all_star):
                         completed.append(e)
                         n += 1
                 day += timedelta(days=1)
