@@ -10,7 +10,7 @@ Each model's predicted mean becomes a negative binomial distribution, so it can 
 on what the betting step needs: the chance a stat goes over a line. Lines aren't stored
 historically, so the proxy line is the player's 10-game average rounded to the nearest .5
 below, about where books open. Where the odds snapshot overlaps the test games, models are
-also compared prop by prop with the books' no-vig probabilities on the real lines.
+also compared bet by bet (each side of each prop) with the books' no-vig probabilities on the real lines.
 
     python scripts/model_experiments.py [--league nba]
 """
@@ -111,6 +111,17 @@ def nb_over(line, mu, alpha):
     return nbinom.sf(k, n, n / (n + mu))
 
 
+def nb_under(line, mu, alpha):
+    """P(stat < line). On whole-number lines the rest is the chance of a push."""
+    mu = np.clip(mu, 0.05, None)
+    k = np.ceil(line) - 1
+    if alpha == 0:
+        from scipy.stats import poisson
+        return poisson.cdf(k, mu)
+    n = 1 / alpha
+    return nbinom.cdf(k, n, n / (n + mu))
+
+
 def fit_alpha(y, mu):
     """Dispersion that maximises the likelihood of y under NB(mu, alpha)."""
     nll = [-nb_logpmf(y, mu, a).mean() for a in ALPHAS]
@@ -182,8 +193,8 @@ def run(league="nba", report=print):
         add(t, "Ensemble (RF + GB)", np.mean([valid_preds[t][n] for n in ENSEMBLE], axis=0),
             np.mean([preds[t][n][0] for n in ENSEMBLE], axis=0), " + ".join(ENSEMBLE), t0)
     results = pd.DataFrame(rows)
-    props = vegas_props(league, parts["test"], preds, report)
-    return results, props, parts, preds
+    bets = vegas_bets(league, parts["test"], preds, report)
+    return results, bets, parts, preds
 
 
 def calibration(parts, preds, model, bins=(0, .2, .3, .4, .5, .6, .7, .8, 1)):
@@ -249,9 +260,10 @@ def consensus(quotes):
     return props.drop(columns="_tie")
 
 
-def vegas_props(league, test, preds, report=print):
-    """One row per player prop in the odds snapshot that overlaps the test games: the books'
-    prices and no-vig probability next to each model's, and what actually happened."""
+def vegas_bets(league, test, preds, report=print):
+    """One row per bet (each side of each player prop) in the odds snapshot that overlaps the
+    test games: best price, the books' no-vig chance of winning next to each model's, the
+    expected value at the best price, and what actually happened."""
     if not ODDS_FILE.exists():
         return None
     quotes = book_quotes(json.loads(ODDS_FILE.read_text()))
@@ -267,46 +279,57 @@ def vegas_props(league, test, preds, report=print):
         j = names.merge(cons[cons["market"] == market], on=["utc_date", "name_key"])
         if j.empty:
             continue
-        line, idx = j["line"].values, j["index"].values
-        out = pd.DataFrame({
-            "game_date": j["game_date"], "player": j["player_name"], "team": j["team"], "opponent": j["opponent"],
-            "home": j["home"].astype(bool), "market": MARKET_LABELS.get(market, market), "line": line,
-            "books": j["books"], "main_line": j["main_line"],
-            "best_over": to_us(j["best_over"].values), "best_over_book": j["best_over_book"],
-            "best_under": to_us(j["best_under"].values), "best_under_book": j["best_under_book"],
-            "vegas_p_over": j["vegas_p_over"],
-        })
+        line, idx, actual = j["line"].values, j["index"].values, j[t].values
         mu, alpha = preds[t][MAIN_MODEL]
-        out["model_mean"] = mu[idx]
-        out["model_p_over"] = nb_over(line, mu[idx], alpha)
-        out["edge"] = out["model_p_over"] - out["vegas_p_over"]  # + leans Over, - leans Under
-        out["actual"] = j[t].values
-        out["result"] = np.select([out["actual"] > line, out["actual"] < line], ["Over", "Under"], "Push")
-        for model, (mu_m, a_m) in preds[t].items():
-            out[f"p_over: {model}"] = nb_over(line, mu_m[idx], a_m)
-        frames.append(out)
+        for side in ("Over", "Under"):
+            over = side == "Over"
+            win_prob = (lambda m, a: nb_over(line, m, a)) if over else (lambda m, a: nb_under(line, m, a))
+            dec = j["best_over" if over else "best_under"].values
+            p_win = win_prob(mu[idx], alpha)
+            p_push = 1 - nb_over(line, mu[idx], alpha) - nb_under(line, mu[idx], alpha)  # 0 on half-point lines
+            out = pd.DataFrame({
+                "game_date": j["game_date"], "player": j["player_name"], "team": j["team"], "opponent": j["opponent"],
+                "home": j["home"].astype(bool), "market": MARKET_LABELS.get(market, market), "line": line, "side": side,
+                "books": j["books"], "main_line": j["main_line"],
+                "best_price": to_us(dec), "best_book": j["best_over_book" if over else "best_under_book"],
+                "breakeven_p": 1 / dec,  # win rate needed at the best price (includes the book's margin)
+                "vegas_p_win": j["vegas_p_over"] if over else 1 - j["vegas_p_over"],
+                "model_mean": mu[idx],
+                "model_p_win": p_win,
+            })
+            out["edge"] = out["model_p_win"] - out["vegas_p_win"]
+            out["ev"] = p_win * dec + p_push - 1  # expected profit per $1 at the best price; pushes refund the stake
+            out["actual"] = actual
+            won, lost = (actual > line, actual < line) if over else (actual < line, actual > line)
+            out["outcome"] = np.select([won, lost], ["Win", "Loss"], "Push")
+            for model, (mu_m, a_m) in preds[t].items():
+                out[f"p_win: {model}"] = win_prob(mu_m[idx], a_m)
+            frames.append(out)
     if not frames:
         report("Odds snapshot doesn't overlap the test games; no Vegas comparison.")
         return None
-    props = pd.concat(frames, ignore_index=True).sort_values(["game_date", "player", "market", "line"]).reset_index(drop=True)
-    report(f"Vegas comparison: {len(props):,} props ({props['main_line'].sum():,} main lines) from the odds snapshot")
-    return props
+    bets = (pd.concat(frames, ignore_index=True)
+            .sort_values(["game_date", "player", "market", "line", "side"], ascending=[True, True, True, True, False])
+            .reset_index(drop=True))
+    report(f"Vegas comparison: {len(bets):,} bets ({len(bets) // 2:,} props, {bets['main_line'].sum() // 2:,} main lines) "
+           "from the odds snapshot")
+    return bets
 
 
-def vegas_summary(props, main_only=False, min_books=1):
-    """Brier and log loss per stat for the books and each model, from the per-prop table. Pushes are dropped."""
-    d = props[(props["result"] != "Push") & (props["books"] >= min_books)]
+def vegas_summary(bets, main_only=False, min_books=1):
+    """Brier and log loss of P(win) per stat for the books and each model, over every bet. Pushes are dropped."""
+    d = bets[(bets["outcome"] != "Push") & (bets["books"] >= min_books)]
     if main_only:
         d = d[d["main_line"]]
-    over = (d["result"] == "Over").astype(float)
-    cols = {"Vegas consensus (no vig)": "vegas_p_over", **{c.split(": ", 1)[1]: c for c in d if c.startswith("p_over: ")}}
+    won = (d["outcome"] == "Win").astype(float)
+    cols = {"Vegas consensus (no vig)": "vegas_p_win", **{c.split(": ", 1)[1]: c for c in d if c.startswith("p_win: ")}}
     rows = []
     for market, g in d.groupby("market"):
-        o = over[g.index]
+        w = won[g.index]
         for model, col in cols.items():
             p = g[col].clip(1e-6, 1 - 1e-6)
-            rows.append({"market": market, "model": model, "props": len(g), "Brier": float(np.mean((p - o) ** 2)),
-                         "Log loss": float(-np.mean(o * np.log(p) + (1 - o) * np.log(1 - p)))})
+            rows.append({"market": market, "model": model, "bets": len(g), "Brier": float(np.mean((p - w) ** 2)),
+                         "Log loss": float(-np.mean(w * np.log(p) + (1 - w) * np.log(1 - p)))})
     return pd.DataFrame(rows)
 
 
@@ -314,15 +337,15 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--league", default="nba", choices=["nba", "wnba"])
     args = parser.parse_args()
-    results, props, _, _ = run(args.league)
+    results, bets, _, _ = run(args.league)
     results.to_csv(OUT_DIR / f"{args.league}_model_results.csv", index=False)
     test = results[results["split"] == "test"].pivot(index="model", columns="target", values="Log score")
     print("\nTest log score (lower is better):\n", test.round(4).to_string())
-    if props is not None:
-        props.to_csv(OUT_DIR / f"{args.league}_vegas_props.csv", index=False)
-        print(f"\nSaved {args.league}_vegas_props.csv: one row per player prop")
-        summary = vegas_summary(props).pivot(index="model", columns="market", values="Brier")
-        print("\nVegas comparison Brier, all props (lower is better):\n", summary.round(4).to_string())
+    if bets is not None:
+        bets.to_csv(OUT_DIR / f"{args.league}_vegas_bets.csv", index=False)
+        print(f"\nSaved {args.league}_vegas_bets.csv: one row per bet (each side of each prop)")
+        summary = vegas_summary(bets).pivot(index="model", columns="market", values="Brier")
+        print("\nVegas comparison Brier of P(win), all bets (lower is better):\n", summary.round(4).to_string())
 
 
 if __name__ == "__main__":
