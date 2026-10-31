@@ -12,12 +12,20 @@ historically, so the proxy line is the player's 10-game average rounded to the n
 below, about where books open. Where the odds snapshot overlaps the test games, models are
 also compared bet by bet (each side of each prop) with the books' no-vig probabilities on the real lines.
 
+Raw model probabilities are too confident at the extremes, so for betting each model
+probability is blended with the books' no-vig probability (W_MODEL), since the books are
+sharper on average.
+
+Writes the bets twice: {league}_vegas_bets.csv (raw) and {league}_vegas_bets_eval.csv, which
+adds the betting-strategy columns from the manual evaluation workbook.
+
     python scripts/model_experiments.py [--league nba]
 """
 import argparse
 import json
 import time
 import warnings
+from collections import namedtuple
 
 import numpy as np
 import pandas as pd
@@ -37,6 +45,14 @@ VALID_START = "2026-02-01"     # within the previous season
 ODDS_FILE = ROOT / "data" / "player_props.json"
 STAT_FOR_MARKET = TARGETS      # odds market -> stat column
 ALPHAS = np.r_[0, np.geomspace(1e-3, 2, 60)]  # negative binomial dispersion grid (0 = Poisson)
+W_MODEL = 0.5                  # weight on the model when blending with Vegas; 0 = Vegas only. Untuned: needs odds history
+# Strategy columns in the eval file (mirrors nba_vegas_bets_Manual Eval.xlsx).
+STAKE = 10
+BET_MIN_EV = 0.0               # bet when ev is above this
+CONFIDENT_MIN_EV = 0.3         # "confident" bet when ev is above this
+
+# A model's test-season predictions: mean and negative binomial dispersion.
+Pred = namedtuple("Pred", "mu alpha")
 
 
 # ---------- data ----------
@@ -128,6 +144,20 @@ def fit_alpha(y, mu):
     return float(ALPHAS[int(np.argmin(nll))])
 
 
+def p_over(pred, line, idx=slice(None)):
+    return nb_over(line, pred.mu[idx], pred.alpha)
+
+
+def p_under(pred, line, idx=slice(None)):
+    return nb_under(line, pred.mu[idx], pred.alpha)
+
+
+def blend(p_model, p_vegas, w=W_MODEL):
+    """Weighted average in log-odds, so the blend of each side's chances still adds to 1."""
+    lo = lambda p: np.log(np.clip(p, 1e-6, 1 - 1e-6) / (1 - np.clip(p, 1e-6, 1 - 1e-6)))
+    return 1 / (1 + np.exp(-(w * lo(p_model) + (1 - w) * lo(p_vegas))))
+
+
 def proxy_line(df, t):
     """Player's 10-game average, rounded down to the nearest .5 (at least 0.5)."""
     return np.maximum(np.floor(df[f"{t}_l10"].values) + 0.5, 0.5)
@@ -154,7 +184,7 @@ def run(league="nba", report=print):
     def add(t, name, mu_va, mu_te, settings, t0):
         va, te = parts["valid"], parts["test"]
         alpha = fit_alpha(va[t].values, mu_va)
-        preds[t][name], valid_preds[t][name] = (mu_te, alpha), mu_va
+        preds[t][name], valid_preds[t][name] = Pred(mu_te, alpha), mu_va
         for part, d, mu in (("valid", va, mu_va), ("test", te, mu_te)):
             rows.append({"target": t, "model": name, "split": part, "settings": settings, "alpha": alpha,
                          **score(d[t].values, mu, alpha, proxy_line(d, t)), "seconds": round(time.time() - t0, 1)})
@@ -191,7 +221,7 @@ def run(league="nba", report=print):
         # Ensemble: average of the tree models' predictions.
         t0 = time.time()
         add(t, "Ensemble (RF + GB)", np.mean([valid_preds[t][n] for n in ENSEMBLE], axis=0),
-            np.mean([preds[t][n][0] for n in ENSEMBLE], axis=0), " + ".join(ENSEMBLE), t0)
+            np.mean([preds[t][n].mu for n in ENSEMBLE], axis=0), " + ".join(ENSEMBLE), t0)
     results = pd.DataFrame(rows)
     bets = vegas_bets(league, parts["test"], preds, report)
     return results, bets, parts, preds
@@ -202,9 +232,9 @@ def calibration(parts, preds, model, bins=(0, .2, .3, .4, .5, .6, .7, .8, 1)):
     te = parts["test"]
     frames = []
     for t in target_stats():
-        mu, alpha = preds[t][model]
         line = proxy_line(te, t)
-        frames.append(pd.DataFrame({"p": nb_over(line, mu, alpha), "over": (te[t].values > line).astype(float)}))
+        p = p_over(preds[t][model], line)
+        frames.append(pd.DataFrame({"p": p, "over": (te[t].values > line).astype(float)}))
     c = pd.concat(frames)
     c["bin"] = pd.cut(c["p"], list(bins))
     return c.groupby("bin", observed=True).agg(props=("p", "size"), predicted=("p", "mean"), actual=("over", "mean"))
@@ -280,30 +310,33 @@ def vegas_bets(league, test, preds, report=print):
         if j.empty:
             continue
         line, idx, actual = j["line"].values, j["index"].values, j[t].values
-        mu, alpha = preds[t][MAIN_MODEL]
+        main = preds[t][MAIN_MODEL]
+        p_push = 1 - nb_over(line, main.mu[idx], main.alpha) - nb_under(line, main.mu[idx], main.alpha)  # 0 on half-point lines
         for side in ("Over", "Under"):
             over = side == "Over"
-            win_prob = (lambda m, a: nb_over(line, m, a)) if over else (lambda m, a: nb_under(line, m, a))
+            win_prob = p_over if over else p_under
             dec = j["best_over" if over else "best_under"].values
-            p_win = win_prob(mu[idx], alpha)
-            p_push = 1 - nb_over(line, mu[idx], alpha) - nb_under(line, mu[idx], alpha)  # 0 on half-point lines
+            vegas = j["vegas_p_over"].values if over else 1 - j["vegas_p_over"].values
+            p_win = win_prob(main, line, idx)
+            final = blend(p_win, vegas)
             out = pd.DataFrame({
                 "game_date": j["game_date"], "player": j["player_name"], "team": j["team"], "opponent": j["opponent"],
                 "home": j["home"].astype(bool), "market": MARKET_LABELS.get(market, market), "line": line, "side": side,
                 "books": j["books"], "main_line": j["main_line"],
                 "best_price": to_us(dec), "best_book": j["best_over_book" if over else "best_under_book"],
                 "breakeven_p": 1 / dec,  # win rate needed at the best price (includes the book's margin)
-                "vegas_p_win": j["vegas_p_over"] if over else 1 - j["vegas_p_over"],
-                "model_mean": mu[idx],
+                "vegas_p_win": vegas,
+                "model_mean": main.mu[idx],
                 "model_p_win": p_win,
+                "final_p_win": final,  # model blended with Vegas; used for ev
             })
             out["edge"] = out["model_p_win"] - out["vegas_p_win"]
-            out["ev"] = p_win * dec + p_push - 1  # expected profit per $1 at the best price; pushes refund the stake
+            out["ev"] = final * dec + p_push - 1  # expected profit per $1 at the best price; pushes refund the stake
             out["actual"] = actual
             won, lost = (actual > line, actual < line) if over else (actual < line, actual > line)
             out["outcome"] = np.select([won, lost], ["Win", "Loss"], "Push")
-            for model, (mu_m, a_m) in preds[t].items():
-                out[f"p_win: {model}"] = win_prob(mu_m[idx], a_m)
+            for model, pred in preds[t].items():
+                out[f"p_win: {model}"] = win_prob(pred, line, idx)
             frames.append(out)
     if not frames:
         report("Odds snapshot doesn't overlap the test games; no Vegas comparison.")
@@ -322,7 +355,9 @@ def vegas_summary(bets, main_only=False, min_books=1):
     if main_only:
         d = d[d["main_line"]]
     won = (d["outcome"] == "Win").astype(float)
-    cols = {"Vegas consensus (no vig)": "vegas_p_win", **{c.split(": ", 1)[1]: c for c in d if c.startswith("p_win: ")}}
+    cols = {"Vegas consensus (no vig)": "vegas_p_win",
+            **{c.split(": ", 1)[1]: c for c in d if c.startswith("p_win: ")},
+            f"Blend ({W_MODEL:.0%} model, {1 - W_MODEL:.0%} Vegas)": "final_p_win"}
     rows = []
     for market, g in d.groupby("market"):
         w = won[g.index]
@@ -330,6 +365,72 @@ def vegas_summary(bets, main_only=False, min_books=1):
             p = g[col].clip(1e-6, 1 - 1e-6)
             rows.append({"market": market, "model": model, "bets": len(g), "Brier": float(np.mean((p - w) ** 2)),
                          "Log loss": float(-np.mean(w * np.log(p) + (1 - w) * np.log(1 - p)))})
+    return pd.DataFrame(rows)
+
+
+# ---------- evaluating bets ----------
+
+def decimal_odds(us):
+    us = np.asarray(us, dtype=float)
+    return np.where(us > 0, 1 + us / 100, 1 + 100 / -us)
+
+
+def add_eval_columns(bets, stake=STAKE, min_ev=BET_MIN_EV, confident_ev=CONFIDENT_MIN_EV):
+    """The strategy columns from the manual evaluation workbook, as values. Two strategies:
+    bet `stake` on every bet with ev above min_ev, and on every bet with ev above confident_ev.
+    max_win is the payout if it wins (stake included); pushes refund the stake."""
+    out = bets.copy()
+    dec = decimal_odds(out["best_price"])
+    for prefix, cut in (("", min_ev), ("confident_", confident_ev)):
+        bet = out["ev"] > cut
+        st = np.where(bet, stake, 0)
+        out[f"{prefix}bet"] = np.where(bet, "Yes", "No")
+        out[f"{prefix}stake"] = st
+        out[f"{prefix}max_win"] = st * dec
+        out[f"{prefix}actual_win"] = np.select([out["outcome"] == "Win", out["outcome"] == "Push"], [st * dec, st], 0)
+        out[f"{prefix}profit"] = out[f"{prefix}actual_win"] - st
+    return out
+
+
+def strategy_summary(ev_bets, main_only=True):
+    """Bets, staked, profit and return for each strategy in the eval columns."""
+    d = ev_bets[ev_bets["main_line"]] if main_only else ev_bets
+    rows = []
+    for prefix, name in (("", f"ev > {BET_MIN_EV}"), ("confident_", f"ev > {CONFIDENT_MIN_EV}")):
+        staked = d[f"{prefix}stake"].sum()
+        profit = d[f"{prefix}profit"].sum()
+        rows.append({"strategy": name, "bets": int((d[f"{prefix}stake"] > 0).sum()), "staked": staked,
+                     "profit": round(profit, 2), "return": profit / staked if staked else np.nan})
+    return pd.DataFrame(rows)
+
+
+def ev_buckets(bets, main_only=True, edges=(0, .05, .1, .2, .3, 2)):
+    """Positive-ev bets grouped by ev: predicted vs actual win rate and return at a flat stake."""
+    d = bets[(bets["ev"] > 0) & (bets["main_line"] if main_only else True)].copy()
+    dec = decimal_odds(d["best_price"])
+    d["profit"] = np.select([d["outcome"] == "Win", d["outcome"] == "Loss"], [dec - 1, -1], 0)
+    d["won"] = (d["outcome"] == "Win").astype(float)
+    d["ev_bucket"] = pd.cut(d["ev"], list(edges))
+    return d.groupby("ev_bucket", observed=True).agg(
+        bets=("ev", "size"), final_p_win=("final_p_win", "mean"), vegas_p_win=("vegas_p_win", "mean"),
+        breakeven=("breakeven_p", "mean"), actual_win=("won", "mean"), mean_ev=("ev", "mean"), actual_return=("profit", "mean"))
+
+
+def blend_sensitivity(bets, weights=(0, 0.25, 0.5, 0.75, 1), main_only=True):
+    """How the blend weight changes the positive-ev bets. On one night of odds this is a
+    sanity check, not a way to pick the weight (that would tune on the test games)."""
+    d = bets[bets["main_line"]] if main_only else bets
+    d = d[d["outcome"] != "Push"]
+    dec = decimal_odds(d["best_price"])
+    won = (d["outcome"] == "Win").astype(float).values
+    rows = []
+    for w in weights:
+        p = blend(d["model_p_win"].values, d["vegas_p_win"].values, w)
+        ev = p * dec - 1
+        pick = ev > 0
+        profit = np.where(won[pick] == 1, dec[pick] - 1, -1)
+        rows.append({"model weight": w, "Brier": float(np.mean((p - won) ** 2)), "positive-ev bets": int(pick.sum()),
+                     "return": float(profit.mean()) if pick.any() else np.nan})
     return pd.DataFrame(rows)
 
 
@@ -343,7 +444,10 @@ def main():
     print("\nTest log score (lower is better):\n", test.round(4).to_string())
     if bets is not None:
         bets.to_csv(OUT_DIR / f"{args.league}_vegas_bets.csv", index=False)
-        print(f"\nSaved {args.league}_vegas_bets.csv: one row per bet (each side of each prop)")
+        evals = add_eval_columns(bets)
+        evals.to_csv(OUT_DIR / f"{args.league}_vegas_bets_eval.csv", index=False)
+        print(f"\nSaved {args.league}_vegas_bets.csv (one row per bet) and {args.league}_vegas_bets_eval.csv (plus strategy columns)")
+        print("\nStrategies on main lines:\n", strategy_summary(evals).round(3).to_string(index=False))
         summary = vegas_summary(bets).pivot(index="model", columns="market", values="Brier")
         print("\nVegas comparison Brier of P(win), all bets (lower is better):\n", summary.round(4).to_string())
 

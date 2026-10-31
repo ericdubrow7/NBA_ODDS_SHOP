@@ -54,11 +54,13 @@ Then build model features for points, rebounds, assists and threes: rolling form
 python scripts/build_features.py --league nba
 ```
 
-Then compare models (`pip install scikit-learn scipy`; about 3 minutes):
+Then compare models (`pip install scikit-learn scipy`; 5-10 minutes):
 
 ```bash
 python scripts/model_experiments.py --league nba
 ```
+
+For test games covered by the odds snapshot, it writes one row per bet (each side of each prop) to `nba_vegas_bets.csv`: best price, the books' no-vig chance of winning, the model's chance, a blend of the two (used for expected value), and the result. `nba_vegas_bets_eval.csv` adds flat-stake strategy columns (ev above 0, and above 0.3) for checking returns.
 
 All three write CSVs to `model_data/`, which is gitignored along with its ESPN cache (about 60 MB per league). The first run takes 10-15 minutes, and later runs take seconds because finished games are cached. ESPN's API is unofficial and could change without notice.
 
