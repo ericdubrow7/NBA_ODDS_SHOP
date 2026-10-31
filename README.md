@@ -30,6 +30,7 @@ There's no server and no build step. It's just HTML, CSS and JavaScript files pl
 | `notebooks/Component 2 - Feature Engineering.ipynb` | Runs the feature build and shows the features |
 | `scripts/model_experiments.py` | Compares prediction models per stat (time-based split, P(over) scoring, Vegas benchmark) |
 | `notebooks/Component 2 - Model Experiments.ipynb` | Runs the model comparison and shows the results |
+| `scripts/fetch_historical_odds.py` | Pulls historical prop odds (one snapshot per game, 30 min before tip) for backtesting; paid Odds API plan |
 
 ## Getting data into the app
 
@@ -62,7 +63,14 @@ python scripts/model_experiments.py --league nba
 
 For test games covered by the odds snapshot, it writes one row per bet (each side of each prop) to `nba_vegas_bets.csv`: best price, the books' no-vig chance of winning, the model's chance, a blend of the two (used for expected value), and the result. `nba_vegas_bets_eval.csv` adds flat-stake strategy columns (ev above 0, and above 0.3) for checking returns.
 
-All three write CSVs to `model_data/`, which is gitignored along with its ESPN cache (about 60 MB per league). The first run takes 10-15 minutes, and later runs take seconds because finished games are cached. ESPN's API is unofficial and could change without notice.
+For backtesting on many nights, pull historical prop odds for the last quarter of last season and this season so far (paid Odds API plan; about 40 credits per game). `--dry-run` shows the game count and cost without making requests:
+
+```bash
+python scripts/fetch_historical_odds.py --dry-run
+ODDS_API_KEY=xxxx python scripts/fetch_historical_odds.py
+```
+
+All of these write to `model_data/`, which is gitignored along with its ESPN cache (about 60 MB per league). The first run takes 10-15 minutes, and later runs take seconds because finished games are cached. ESPN's API is unofficial and could change without notice.
 
 ## Run locally
 
