@@ -28,6 +28,8 @@ There's no server and no build step. It's just HTML, CSS and JavaScript files pl
 | `notebooks/Component 2 - Player Stats Ingestion.ipynb` | Runs the stats ingestion step by step for inspection |
 | `scripts/build_features.py` | Feature engineering on the ingested stats, for every prop stat |
 | `notebooks/Component 2 - Feature Engineering.ipynb` | Runs the feature build and shows the features |
+| `scripts/model_experiments.py` | Compares prediction models per stat (time-based split, P(over) scoring, Vegas benchmark) |
+| `notebooks/Component 2 - Model Experiments.ipynb` | Runs the model comparison and shows the results |
 
 ## Getting data into the app
 
@@ -52,7 +54,13 @@ Then build model features for points, rebounds, assists and threes: rolling form
 python scripts/build_features.py --league nba
 ```
 
-Both write CSVs to `model_data/`, which is gitignored along with its ESPN cache (about 60 MB per league). The first run takes 10-15 minutes, and later runs take seconds because finished games are cached. ESPN's API is unofficial and could change without notice.
+Then compare models (`pip install scikit-learn scipy`; about 3 minutes):
+
+```bash
+python scripts/model_experiments.py --league nba
+```
+
+All three write CSVs to `model_data/`, which is gitignored along with its ESPN cache (about 60 MB per league). The first run takes 10-15 minutes, and later runs take seconds because finished games are cached. ESPN's API is unofficial and could change without notice.
 
 ## Run locally
 
