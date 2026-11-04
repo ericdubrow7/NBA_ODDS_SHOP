@@ -28,8 +28,10 @@ There's no server and no build step. It's just HTML, CSS and JavaScript files pl
 | `notebooks/Component 2 - Player Stats Ingestion.ipynb` | Runs the stats ingestion step by step for inspection |
 | `scripts/build_features.py` | Feature engineering on the ingested stats, for every prop stat |
 | `notebooks/Component 2 - Feature Engineering.ipynb` | Runs the feature build and shows the features |
-| `scripts/model_experiments.py` | Compares prediction models per stat (time-based split, P(over) scoring, Vegas benchmark) |
-| `notebooks/Component 2 - Model Experiments.ipynb` | Runs the model comparison and shows the results |
+| `scripts/stat_model.py` | Predicts each player's points, rebounds, assists and threes per game (last season: train first half, test second half; no odds) |
+| `notebooks/Component 2 - Stat Predictions.ipynb` | Runs the stat predictions and shows scores, drivers and player-by-player results |
+| `scripts/line_model.py` | Win % for every historical book line from the stats-only model, next to average Vegas odds, best book odds and the result |
+| `notebooks/Component 2 - Line Win Pct.ipynb` | Runs the line pricing and shows accuracy vs Vegas, calibration and returns by ev |
 | `scripts/fetch_historical_odds.py` | Pulls historical prop odds (one snapshot per game, 30 min before tip) for backtesting; paid Odds API plan |
 
 ## Getting data into the app
@@ -55,15 +57,19 @@ Then build model features for points, rebounds, assists and threes: rolling form
 python scripts/build_features.py --league nba
 ```
 
-Then compare models (`pip install scikit-learn scipy`; 5-10 minutes):
+Then predict each player's stats per game, with no odds involved (`pip install scikit-learn`; about 2 minutes). It uses last season only, trains on the first half and tests on the second half, and writes scores to `nba_stat_model_results.csv` and test-half predictions to `nba_stat_predictions.csv`:
 
 ```bash
-python scripts/model_experiments.py --league nba
+python scripts/stat_model.py --league nba
 ```
 
-For test games covered by the odds snapshot, it writes one row per bet (each side of each prop) to `nba_vegas_bets.csv`: best price, the books' no-vig chance of winning, the model's chance, a blend of the two (used for expected value), and the result. `nba_vegas_bets_eval.csv` adds flat-stake strategy columns (ev above 0, and above 0.3) for checking returns.
+Then give every book line in the test half a win % from that model (needs the historical odds below; `pip install scipy`). The model still uses stats only, and odds are just compared against afterwards. It writes one row per side of each line to `nba_line_bets.csv`, with the books' average odds and no-vig chance, the model's chance and fair odds, the best book's odds, and the actual result:
 
-For backtesting on many nights, pull historical prop odds for the last quarter of last season and this season so far (paid Odds API plan; about 40 credits per game). `--dry-run` shows the game count and cost without making requests:
+```bash
+python scripts/line_model.py --league nba
+```
+
+For backtesting on many nights, pull historical prop odds for the second half of last season and this season so far (paid Odds API plan; about 40 credits per game). `--dry-run` shows the game count and cost without making requests:
 
 ```bash
 python scripts/fetch_historical_odds.py --dry-run

@@ -1,7 +1,7 @@
 """Historical player prop odds from The Odds API, for backtesting the model on many nights.
 
 Pulls one snapshot per completed game, LEAD_MINUTES before tip-off (close to the closing
-line), for the last quarter of last regular season and all of this season so far. Games
+line), for the second half of last regular season and all of this season so far. Games
 come from fetch_player_stats.py's game logs, so run that first to include the latest games.
 
 Each game is cached under model_data/odds_history/{league}/ and never fetched again, so an
@@ -35,7 +35,7 @@ from fetch_player_stats import OUT_DIR
 
 API = "https://api.the-odds-api.com/v4/historical/sports"
 LEAD_MINUTES = 30        # snapshot this long before tip-off
-LAST_SEASON_SHARE = 0.25  # last quarter of last season's regular-season games
+LAST_SEASON_SHARE = 0.5  # second half of last season's regular-season games
 MATCH_WINDOW = timedelta(hours=3)  # ESPN and Odds API start times must agree within this
 REQUEST_SLEEP = 0.3
 
@@ -54,7 +54,7 @@ def nickname(team):
 # ---------- which games ----------
 
 def target_games(league):
-    """Completed games to backtest: last quarter of last regular season, plus this season so far."""
+    """Completed games to backtest: second half of last regular season, plus this season so far."""
     logs = pd.read_csv(OUT_DIR / f"{league}_player_game_logs.csv",
                        usecols=["game_id", "season", "season_type", "start_utc", "game_date", "team_name", "opponent_name", "home"],
                        dtype={"game_id": str})
