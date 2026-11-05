@@ -30,6 +30,7 @@ There's no server and no build step. It's just HTML, CSS and JavaScript files pl
 | `notebooks/Component 2 - Feature Engineering.ipynb` | Runs the feature build and shows the features |
 | `scripts/stat_model.py` | Predicts each player's points, rebounds, assists and threes per game (last season: train first half, test second half; no odds) |
 | `notebooks/Component 2 - Stat Predictions.ipynb` | Runs the stat predictions and shows scores, drivers and player-by-player results |
+| `scripts/player_model.py` | Reference: a separate model per player, compared with the pooled model (it predicted worse) |
 | `scripts/line_model.py` | Win % for every historical book line from the stats-only model, next to average Vegas odds, best book odds and the result |
 | `notebooks/Component 2 - Line Win Pct.ipynb` | Runs the line pricing and shows accuracy vs Vegas, calibration and returns by ev |
 | `scripts/fetch_historical_odds.py` | Pulls historical prop odds (one snapshot per game, 30 min before tip) for backtesting; paid Odds API plan |
@@ -57,7 +58,7 @@ Then build model features for points, rebounds, assists and threes: rolling form
 python scripts/build_features.py --league nba
 ```
 
-Then predict each player's stats per game, with no odds involved (`pip install scikit-learn`; about 2 minutes). It uses last season only, trains on the first half and tests on the second half, and writes scores to `nba_stat_model_results.csv` and test-half predictions to `nba_stat_predictions.csv`:
+Then predict each player's stats per game, with no odds involved (`pip install scikit-learn`; about 5 minutes). It uses last season only, trains on the first half and tests on the second half, retraining the models weekly through the second half the way they'd be used for real (`--frozen` trains once instead), and writes scores to `nba_stat_model_results.csv` and test-half predictions to `nba_stat_predictions.csv`:
 
 ```bash
 python scripts/stat_model.py --league nba

@@ -6,14 +6,19 @@ Uses last season only, split by date at the midpoint of its regular-season games
 
 - train: first half of the season. Its last TUNE_SHARE of dates is held out to pick each
   model's settings, then the model is refit on the whole first half.
-- test:  second half of the season, never seen while fitting or tuning.
+- test:  second half of the season, never seen while tuning.
+
+By default the models are retrained weekly through the test half, the way they'd be used for
+real: each week's games are predicted by models refit (same settings) on every game played
+before that week. "Ensemble (frozen)" is the first week's models kept for the whole test half,
+for comparison. --frozen trains once instead.
 
 Rows need MIN_PRIOR earlier games so the rolling features mean something.
 
 Writes {league}_stat_model_results.csv (scores by model and stat) and
 {league}_stat_predictions.csv (one row per player-game in the test half, actual vs predicted).
 
-    python scripts/stat_model.py [--league nba]
+    python scripts/stat_model.py [--league nba] [--frozen]
 """
 import argparse
 import time
@@ -32,6 +37,7 @@ from fetch_player_stats import OUT_DIR
 
 MIN_PRIOR = 10       # earlier games a row needs
 TUNE_SHARE = 0.2     # last share of the train half's dates used to pick settings
+RETRAIN_DAYS = 7     # weekly mode: refit the models on everything played so far this often
 ENSEMBLE = ["Ridge regression", "Random forest", "Gradient boosting (Poisson)"]  # averaged into "Ensemble"
 STAT_NAMES = {"pts": "Points", "reb": "Rebounds", "ast": "Assists", "fg3m": "Threes"}
 
@@ -97,13 +103,39 @@ def tune(make, grid, fit, val, feats, t):
     return best[1], best[2]
 
 
-def run(league="nba", report=print):
+def week_starts(test, days=RETRAIN_DAYS):
+    """Start date of each retraining period in the test half."""
+    first, last = test["game_date"].min(), test["game_date"].max()
+    return list(pd.date_range(first, last, freq=f"{days}D"))
+
+
+def weekly_predict(make, p, train, test, feats, t, starts):
+    """Each period's test games predicted by a model fit on every game before that period
+    (the train half plus test games already played). Also returns the first period's model,
+    which saw only the train half: the frozen model."""
+    pool = pd.concat([train, test])
+    pred, frozen = np.empty(len(test)), None
+    for start, end in zip(starts, starts[1:] + [None]):
+        rows = ((test["game_date"] >= start) & ((test["game_date"] < end) if end is not None else True)).to_numpy()
+        hist = pool[pool["game_date"] < start]
+        model = make(p).fit(hist[feats], hist[t])
+        if frozen is None:
+            frozen = model
+        pred[rows] = np.clip(model.predict(test.loc[rows, feats]), 0, None)
+    return pred, frozen
+
+
+def run(league="nba", report=print, weekly=True):
+    """weekly: refit the models every RETRAIN_DAYS through the test half (False: train once on
+    the train half and keep that model for the whole test half)."""
     df, feats = load(league)
     sp = season_split(df)
     train, test = sp["train"], sp["test"]
     fit, val = train[train["game_date"] < sp["tune_start"]], train[train["game_date"] >= sp["tune_start"]]
+    starts = week_starts(test) if weekly else [test["game_date"].min()]
     report(f"Season {sp['season']}: train {len(train):,} player-games before {sp['midpoint']:%Y-%m-%d} "
-           f"(settings tuned on {len(val):,} from {sp['tune_start']:%Y-%m-%d}), test {len(test):,} after")
+           f"(settings tuned on {len(val):,} from {sp['tune_start']:%Y-%m-%d}), test {len(test):,} after"
+           + (f", models refit every {RETRAIN_DAYS} days ({len(starts)} times)" if weekly else ", models trained once"))
 
     preds = test[["game_date", "player_name", "team", "opponent", "home", "pos", "min_l10", *target_stats()]].copy()
     # val_preds: the ensemble's predictions for the held-out end of the train half, from models
@@ -113,14 +145,17 @@ def run(league="nba", report=print):
         out, val_out = {}, {}
         for name, col in BASELINES.items():
             out[name] = test[col.format(t=t)].fillna(test[f"{t}_l10"]).to_numpy()
+        frozen = {}
         for name, (grid, make) in MODELS.items():
             t0 = time.time()
             p, val_out[name] = tune(make, grid, fit, val, feats, t)
-            model = make(p).fit(train[feats], train[t])
-            out[name] = np.clip(model.predict(test[feats]), 0, None)
+            out[name], model = weekly_predict(make, p, train, test, feats, t, starts)
+            frozen[name] = np.clip(model.predict(test[feats]), 0, None)
             settings[(t, name)], fitted[(t, name)] = p, model
             report(f"  {STAT_NAMES[t]:<9} {name:<28} {p}  ({time.time() - t0:.0f}s)")
         out["Ensemble"] = np.mean([out[m] for m in ENSEMBLE], axis=0)
+        if weekly:
+            out["Ensemble (frozen)"] = np.mean([frozen[m] for m in ENSEMBLE], axis=0)
         val_preds[t] = np.mean([val_out[m] for m in ENSEMBLE], axis=0)
         for name, pred in out.items():
             rows.append({"stat": STAT_NAMES[t], "model": name, **scores(test[t].to_numpy(), pred)})
@@ -128,8 +163,8 @@ def run(league="nba", report=print):
         preds[f"{t}_pred"] = out["Ensemble"]
 
     results = pd.DataFrame(rows)
-    return {"results": results, "preds": preds, "split": sp, "feats": feats,
-            "settings": settings, "models": fitted, "val": val, "val_preds": val_preds}
+    return {"results": results, "preds": preds, "split": sp, "feats": feats, "settings": settings,
+            "models": fitted, "val": val, "val_preds": val_preds, "weekly": weekly, "week_starts": starts}
 
 
 # ---------- summaries ----------
@@ -170,8 +205,9 @@ def save(league, run_out):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--league", default="nba")
+    ap.add_argument("--frozen", action="store_true", help="train once on the train half instead of weekly")
     args = ap.parse_args()
-    out = run(args.league)
+    out = run(args.league, weekly=not args.frozen)
     for metric in ("MAE", "R2", "Bias"):
         print(f"\n{metric} on test half:")
         print(score_table(out["results"], metric).round(3).to_string())
