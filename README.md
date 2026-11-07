@@ -10,7 +10,9 @@ For every NBA and WNBA player-prop line (Points, Rebounds, Assists, Threes), it:
 
 The **Arbitrage** page (`arbitrage.html`) pairs the best Over with the best Under for each line. It lists the pairs where betting both sides locks in a profit, and shows how to split a stake.
 
-Pick NBA, WNBA or both under *Data source & settings*. The choice applies to both pages and decides which leagues a live fetch requests.
+The **Picks** page (`picks.html`) lists bets where a book's price beats the fair price implied by all the books together (their average no-vig chance), the same logic as `scripts/consensus_edge.py`. Every row shows whether it meets each rule: edge over 2%, 4+ books quoting, main line, and Novig not the best price. You can filter by minimum edge and by which rules a pick meets. The rule isn't a proven edge: it lost money in this season's test so far, which the page says up front.
+
+Pick NBA, WNBA or both under *Data source & settings*. The choice applies to every page and decides which leagues a live fetch requests.
 
 There's no server and no build step. It's just HTML, CSS and JavaScript files plus a data snapshot.
 
@@ -20,7 +22,8 @@ There's no server and no build step. It's just HTML, CSS and JavaScript files pl
 | --- | --- |
 | `index.html`, `app.js` | Line Shopper page (all analysis runs in the browser) |
 | `arbitrage.html`, `arbitrage.js` | Arbitrage page |
-| `common.js`, `styles.css` | Shared by both pages: sportsbook list, data loading, settings, styles |
+| `picks.html`, `picks.js` | Picks page: bets that beat the books' consensus fair price, with a check per rule |
+| `common.js`, `styles.css` | Shared by every page: sportsbook list, data loading, settings, styles |
 | `data/player_props.json` | Snapshot loaded on page open, both leagues (same format the notebook saves) |
 | `scripts/fetch_odds.py` | Refreshes the snapshot from The Odds API (key from `ODDS_API_KEY`) |
 | `.github/workflows/refresh-odds.yml` | Optional GitHub Action that runs the script and commits the new snapshot |
@@ -33,6 +36,8 @@ There's no server and no build step. It's just HTML, CSS and JavaScript files pl
 | `scripts/player_model.py` | Reference: a separate model per player, compared with the pooled model (it predicted worse) |
 | `scripts/line_model.py` | Win % for every historical book line from the stats-only model, next to average Vegas odds, best book odds and the result |
 | `notebooks/Component 2 - Line Win Pct.ipynb` | Runs the line pricing and shows accuracy vs Vegas, calibration and returns by ev |
+| `scripts/consensus_edge.py` | No stats model: bets when one book's price beats the books' consensus fair price; backtested on last season, tested on this season |
+| `notebooks/Component 2 - Consensus Edge.ipynb` | Runs the consensus-edge backtest and shows how the fixed rules did on each season |
 | `scripts/fetch_historical_odds.py` | Pulls historical prop odds (one snapshot per game, 30 min before tip) for backtesting; paid Odds API plan |
 
 ## Getting data into the app
@@ -68,6 +73,12 @@ Then give every book line in the test half a win % from that model (needs the hi
 
 ```bash
 python scripts/line_model.py --league nba
+```
+
+To test line shopping without any stats model, compare each book's price with the fair price implied by all the books (their average no-vig probability). It flags bets where the best price beats that by more than 2% on main lines quoted by 4+ books (a rule found on last season's odds), settles them from the box scores, and reports last season and this season separately, this season being the real test. Writes `nba_consensus_bets.csv`:
+
+```bash
+python scripts/consensus_edge.py --league nba
 ```
 
 For backtesting on many nights, pull historical prop odds for the second half of last season and this season so far (paid Odds API plan; about 40 credits per game). `--dry-run` shows the game count and cost without making requests:
